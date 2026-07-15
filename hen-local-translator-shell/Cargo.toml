@@ -1,5 +1,5 @@
 [package]
-name = "moxin-translator-shell"
+name = "hen-local-translator-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,7 @@ makepad-widgets.workspace = true
 moxin-widgets = { path = "../moxin-widgets" }
 moxin-ui = { path = "../moxin-ui" }
 moxin-dora-bridge = { path = "../moxin-dora-bridge" }
-moxin-translator = { path = "../apps/moxin-translator" }
+hen-local-translator = { path = "../apps/hen-local-translator" }
 
 # Audio
 cpal.workspace = true
@@ -35,5 +35,5 @@ clap = { version = "4.4", features = ["derive"] }
 makepad-objc-sys = { git = "https://github.com/wyeworks/makepad", rev = "53b2e5c84" }
 
 [[bin]]
-name = "moxin-translator"
+name = "hen-local-translator"
 path = "src/main.rs"

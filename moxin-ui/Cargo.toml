@@ -2,7 +2,7 @@
 name = "moxin-ui"
 version.workspace = true
 edition.workspace = true
-description = "Shared UI component library for Moxin Translator"
+description = "Shared UI component library for Hen Local Translator"
 
 [dependencies]
 makepad-widgets.workspace = true

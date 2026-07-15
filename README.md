@@ -1,8 +1,8 @@
-# Moxin Translator
+# Hen Local Translator
 
 Offline live speech translation for macOS, built with Rust, Makepad, Dora, and OminiX MLX.
 
-Moxin Translator focuses on one workflow: capture microphone or system audio, transcribe it with Qwen3-ASR, translate committed speech chunks with the Qwen3.5 translator node, and display bilingual subtitles in a floating overlay.
+Hen Local Translator focuses on one workflow: capture microphone or system audio, transcribe it with Qwen3-ASR, translate committed speech chunks with the Qwen3.5 translator node, and display bilingual subtitles in a floating overlay.
 
 ## Features
 
@@ -38,23 +38,23 @@ This downloads:
 | `Qwen3-ASR-1.7B-8bit` | Speech recognition |
 | `Qwen3.5-2B-MLX-4bit` | Text translation |
 
-Packaged builds use the bundled `moxin-init` helper for first-run model bootstrap.
+Packaged builds use the bundled `hen-local-init` helper for first-run model bootstrap.
 
 ## Build And Run
 
 ```bash
 cargo build --release
-cargo run -p moxin-translator-shell
+cargo run -p hen-local-translator-shell
 ```
 
-Some source directories still carry the original fork names during the staged cleanup, but the Cargo packages, product surface, and packaged app are now Moxin Translator.
+Some source directories still carry the original fork names during the staged cleanup, but the Cargo packages, product surface, and packaged app are now Hen Local Translator.
 
 ## Translation Dataflow
 
 The live translation pipeline is defined in:
 
 ```text
-apps/moxin-translator/dataflow/translation_qwen35.yml
+apps/hen-local-translator/dataflow/translation_qwen35.yml
 ```
 
 Runtime graph:
@@ -67,15 +67,15 @@ moxin-mic-input -> dora-qwen3-asr -> dora-qwen35-translator -> moxin-translation
 
 ```bash
 bash scripts/build_macos_app.sh \
-  --icon moxin-widgets/resources/moxin_icon_fixed.png
+  --icon moxin-widgets/resources/hen_local_icon.png
 bash scripts/build_macos_dmg.sh
 ```
 
 The generated app defaults to:
 
-- App name: `Moxin Translator`
-- Bundle id: `com.moxin.translator`
-- DMG name: `Moxin-Translator-v<version>.dmg`
+- App name: `Hen Local Translator`
+- Bundle id: `com.henlocal.translator`
+- DMG name: `Hen-Local-Translator-v<version>.dmg`
 
 ## License
 

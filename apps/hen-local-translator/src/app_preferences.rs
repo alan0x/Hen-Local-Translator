@@ -1,4 +1,4 @@
-//! Local user preferences for Moxin Translator.
+//! Local user preferences for Hen Local Translator.
 //!
 //! Stored at: ~/.dora/primespeech/app_preferences.json
 //! (path kept for backward compatibility with existing installations)

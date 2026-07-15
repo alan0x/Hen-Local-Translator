@@ -201,7 +201,7 @@ live_design! {
         }
 
         title_label = <Label> {
-            text: "Moxin Translator"
+            text: "Hen Local Translator"
             draw_text: {
                 instance dark_mode: 0.0
                 text_style: { font_size: 24.0 }

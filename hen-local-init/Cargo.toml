@@ -1,9 +1,9 @@
 [package]
-name = "moxin-init"
+name = "hen-local-init"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "First-run model download and environment initialization for Moxin Translator"
+description = "First-run model download and environment initialization for Hen Local Translator"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -13,5 +13,5 @@ serde_json = { workspace = true }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 
 [[bin]]
-name = "moxin-init"
+name = "hen-local-init"
 path = "src/main.rs"

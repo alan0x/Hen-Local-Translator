@@ -13,9 +13,9 @@ if [[ -z "$WORKSPACE_VERSION" ]]; then
   exit 1
 fi
 
-APP_NAME="Moxin Translator"
-BUNDLE_ID="com.moxin.translator"
-BIN_NAME="moxin-translator"
+APP_NAME="Hen Local Translator"
+BUNDLE_ID="com.henlocal.translator"
+BIN_NAME="hen-local-translator"
 PROFILE="release"
 ICON_PATH=""
 OUT_DIR="$ROOT_DIR/dist"
@@ -154,15 +154,15 @@ PY
   rm -rf "$tmp_dir"
 }
 
-MAKEPAD=apple_bundle MAKEPAD_PACKAGE_DIR=makepad run_cargo_build "$ROOT_DIR" "$PROFILE" -p moxin-translator-shell --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+MAKEPAD=apple_bundle MAKEPAD_PACKAGE_DIR=makepad run_cargo_build "$ROOT_DIR" "$PROFILE" -p hen-local-translator-shell --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 run_cargo_build "$ROOT_DIR" "$PROFILE" -p dora-qwen3-asr --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 run_cargo_build "$ROOT_DIR" "$PROFILE" -p dora-qwen35-translator --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$ROOT_DIR" "$PROFILE" -p moxin-init --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+run_cargo_build "$ROOT_DIR" "$PROFILE" -p hen-local-init --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 
 SHELL_BIN_PATH="$ROOT_DIR/target/$PROFILE/$BIN_NAME"
 QWEN_ASR_BIN_PATH="$ROOT_DIR/target/$PROFILE/dora-qwen3-asr"
 QWEN35_TRANSLATOR_BIN_PATH="$ROOT_DIR/target/$PROFILE/dora-qwen35-translator"
-MOXIN_INIT_BIN_PATH="$ROOT_DIR/target/$PROFILE/moxin-init"
+MOXIN_INIT_BIN_PATH="$ROOT_DIR/target/$PROFILE/hen-local-init"
 MLX_METALLIB_PATH="$ROOT_DIR/target/$PROFILE/mlx.metallib"
 DORA_BIN_PATH="$(command -v dora || true)"
 if [[ ! -f "$SHELL_BIN_PATH" ]]; then
@@ -205,12 +205,12 @@ fi
 cp "$SHELL_BIN_PATH" "$MACOS_DIR/${BIN_NAME}-bin"
 cp "$QWEN_ASR_BIN_PATH" "$MACOS_DIR/dora-qwen3-asr"
 cp "$QWEN35_TRANSLATOR_BIN_PATH" "$MACOS_DIR/dora-qwen35-translator"
-cp "$MOXIN_INIT_BIN_PATH" "$MACOS_DIR/moxin-init"
+cp "$MOXIN_INIT_BIN_PATH" "$MACOS_DIR/hen-local-init"
 cp "$DORA_BIN_PATH" "$MACOS_DIR/dora"
 if [[ -f "$MLX_METALLIB_PATH" ]]; then
   cp "$MLX_METALLIB_PATH" "$MACOS_DIR/mlx.metallib"
 fi
-chmod +x "$MACOS_DIR/${BIN_NAME}-bin" "$MACOS_DIR/dora-qwen3-asr" "$MACOS_DIR/dora-qwen35-translator" "$MACOS_DIR/moxin-init"
+chmod +x "$MACOS_DIR/${BIN_NAME}-bin" "$MACOS_DIR/dora-qwen3-asr" "$MACOS_DIR/dora-qwen35-translator" "$MACOS_DIR/hen-local-init"
 chmod +x "$MACOS_DIR/dora"
 
 cp "$ROOT_DIR/scripts/macos_preflight.sh" "$SCRIPTS_DIR/macos_preflight.sh"
@@ -268,24 +268,24 @@ set -euo pipefail
 APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RES_DIR="$APP_ROOT/Resources"
 MACOS_DIR="$APP_ROOT/MacOS"
-LOG_DIR="$HOME/Library/Logs/MoxinTranslator"
+LOG_DIR="$HOME/Library/Logs/HenLocalTranslator"
 mkdir -p "$LOG_DIR"
-DORA_RUNTIME_DIR="${MOXIN_DORA_RUNTIME_DIR:-$HOME/.dora/runtime}"
+DORA_RUNTIME_DIR="${HEN_LOCAL_DORA_RUNTIME_DIR:-$HOME/.dora/runtime}"
 mkdir -p "$DORA_RUNTIME_DIR"
 cd "$DORA_RUNTIME_DIR"
 
-export MOXIN_APP_RESOURCES="$RES_DIR"
-export MOXIN_APP_VERSION="__MOXIN_APP_VERSION__"
-export MOXIN_DORA_RUNTIME_DIR="$DORA_RUNTIME_DIR"
+export HEN_LOCAL_APP_RESOURCES="$RES_DIR"
+export HEN_LOCAL_APP_VERSION="__HEN_LOCAL_APP_VERSION__"
+export HEN_LOCAL_DORA_RUNTIME_DIR="$DORA_RUNTIME_DIR"
 export QWEN3_ASR_MODEL_PATH="${QWEN3_ASR_MODEL_PATH:-$HOME/.OminiX/models/qwen3-asr-1.7b}"
 export QWEN35_TRANSLATOR_MODEL_PATH="${QWEN35_TRANSLATOR_MODEL_PATH:-$HOME/.OminiX/models/Qwen3.5-2B-MLX-4bit}"
 export QWEN35_TRANSLATOR_REPO="${QWEN35_TRANSLATOR_REPO:-mlx-community/Qwen3.5-2B-MLX-4bit}"
 export PATH="$MACOS_DIR:$HOME/.cargo/bin:$PATH"
 
-exec "$MACOS_DIR/moxin-translator-bin"
+exec "$MACOS_DIR/hen-local-translator-bin"
 EOF
 
-sed -i '' "s/__MOXIN_APP_VERSION__/$VERSION/g" "$MACOS_DIR/$BIN_NAME"
+sed -i '' "s/__HEN_LOCAL_APP_VERSION__/$VERSION/g" "$MACOS_DIR/$BIN_NAME"
 chmod +x "$MACOS_DIR/$BIN_NAME"
 
 ICON_FILE_NAME=""

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Preflight checks for Moxin Translator (no conda/Python).
-# Conda checks removed — bootstrap now uses the bundled moxin-init Rust binary.
+# Preflight checks for Hen Local Translator (no conda/Python).
+# Conda checks removed — bootstrap now uses the bundled hen-local-init Rust binary.
 set -euo pipefail
 
 MODE="${1:-}"
-APP_RESOURCES="${MOXIN_APP_RESOURCES:-}"
+APP_RESOURCES="${HEN_LOCAL_APP_RESOURCES:-}"
 APP_BIN_PATH=""
 
 QWEN_ASR_MODEL_DIR="${QWEN3_ASR_MODEL_PATH:-$HOME/.OminiX/models/qwen3-asr-1.7b}"
@@ -21,16 +21,16 @@ fi
 TRANSLATION_DATAFLOW_PATH=""
 if [[ -f "$APP_RESOURCES/dataflow/translation_qwen35.yml" ]]; then
   TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/dataflow/translation_qwen35.yml"
-elif [[ -f "$APP_RESOURCES/apps/moxin-translator/dataflow/translation_qwen35.yml" ]]; then
-  TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/apps/moxin-translator/dataflow/translation_qwen35.yml"
+elif [[ -f "$APP_RESOURCES/apps/hen-local-translator/dataflow/translation_qwen35.yml" ]]; then
+  TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/apps/hen-local-translator/dataflow/translation_qwen35.yml"
 fi
 
-if [[ -f "$APP_RESOURCES/../MacOS/moxin-translator-bin" ]]; then
-  APP_BIN_PATH="$APP_RESOURCES/../MacOS/moxin-translator-bin"
+if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator-bin" ]]; then
+  APP_BIN_PATH="$APP_RESOURCES/../MacOS/hen-local-translator-bin"
 else
-  APP_BIN_PATH="$APP_RESOURCES/target/debug/moxin-translator"
+  APP_BIN_PATH="$APP_RESOURCES/target/debug/hen-local-translator"
   if [[ ! -f "$APP_BIN_PATH" ]]; then
-    APP_BIN_PATH="$APP_RESOURCES/target/release/moxin-translator"
+    APP_BIN_PATH="$APP_RESOURCES/target/release/hen-local-translator"
   fi
 fi
 
@@ -99,17 +99,17 @@ ensure_model_complete() {
   return 1
 }
 
-# Locate moxin-init binary
-moxin_init_resolved=0
-resolve_moxin_init() {
-  if [[ -x "$APP_RESOURCES/../MacOS/moxin-init" ]]; then
-    moxin_init_resolved=1; return
+# Locate hen-local-init binary
+hen_local_init_resolved=0
+resolve_hen_local_init() {
+  if [[ -x "$APP_RESOURCES/../MacOS/hen-local-init" ]]; then
+    hen_local_init_resolved=1; return
   fi
-  if [[ -x "$APP_RESOURCES/target/debug/moxin-init" ]]; then
-    moxin_init_resolved=1; return
+  if [[ -x "$APP_RESOURCES/target/debug/hen-local-init" ]]; then
+    hen_local_init_resolved=1; return
   fi
-  if [[ -x "$APP_RESOURCES/target/release/moxin-init" ]]; then
-    moxin_init_resolved=1; return
+  if [[ -x "$APP_RESOURCES/target/release/hen-local-init" ]]; then
+    hen_local_init_resolved=1; return
   fi
 }
 
@@ -146,28 +146,28 @@ if [[ -n "$TRANSLATION_DATAFLOW_PATH" && -f "$TRANSLATION_DATAFLOW_PATH" ]]; the
   fi
 fi
 
-# Check moxin-init binary (required for first-run bootstrap)
-resolve_moxin_init
-if [[ "$moxin_init_resolved" != "1" ]]; then
-  if [[ -f "$APP_RESOURCES/../MacOS/moxin-translator-bin" ]]; then
-    errors+=("moxin-init binary missing from app bundle. Run build_macos_app.sh.")
+# Check hen-local-init binary (required for first-run bootstrap)
+resolve_hen_local_init
+if [[ "$hen_local_init_resolved" != "1" ]]; then
+  if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator-bin" ]]; then
+    errors+=("hen-local-init binary missing from app bundle. Run build_macos_app.sh.")
   else
-    warnings+=("moxin-init not found in dev tree (run: cargo build -p moxin-init --release)")
+    warnings+=("hen-local-init not found in dev tree (run: cargo build -p hen-local-init --release)")
   fi
 fi
 
 # Check Qwen3 ASR model (required)
 if ! ensure_model_complete "$QWEN_ASR_MODEL_DIR" "$QWEN_ASR_REPO" asr_model_ready; then
-  errors+=("Qwen3-ASR model not found: $QWEN_ASR_MODEL_DIR — run moxin-init or launch the app")
+  errors+=("Qwen3-ASR model not found: $QWEN_ASR_MODEL_DIR — run hen-local-init or launch the app")
 fi
 
 # Check Qwen3.5 translator model (required)
 if ! ensure_model_complete "$QWEN35_TRANSLATOR_MODEL_DIR" "$QWEN35_TRANSLATOR_REPO" qwen35_translation_model_ready; then
-  errors+=("Qwen3.5 translator model incomplete: $QWEN35_TRANSLATOR_MODEL_DIR — run moxin-init or launch the app")
+  errors+=("Qwen3.5 translator model incomplete: $QWEN35_TRANSLATOR_MODEL_DIR — run hen-local-init or launch the app")
 fi
 
 if [[ "$MODE" != "--quick" ]]; then
-  echo "=== Moxin Translator Preflight ==="
+  echo "=== Hen Local Translator Preflight ==="
   echo "Resources:  $APP_RESOURCES"
   echo "Dataflow:   $TRANSLATION_DATAFLOW_PATH"
   echo "ASR model:  $QWEN_ASR_MODEL_DIR"

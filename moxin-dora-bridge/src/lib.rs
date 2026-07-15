@@ -1,6 +1,6 @@
 //! # Moxin Dora Bridge
 //!
-//! Communication layer between the Moxin Translator UI and the Dora dataflow runtime.
+//! Communication layer between the Hen Local Translator UI and the Dora dataflow runtime.
 //! Provides thread-safe shared state, data types, and bridge infrastructure for
 //! real-time voice chat applications.
 //!
@@ -25,7 +25,7 @@
 //!           │          Read on UI timer (single poll)         │
 //!           ▼                      ▼                          ▼
 //! ┌─────────────────────────────────────────────────────────────────────────────┐
-//! │                      Moxin Translator UI (Main Thread)                       │
+//! │                      Hen Local Translator UI (Main Thread)                       │
 //! │  poll_dora_state() - reads dirty data, updates widgets                      │
 //! └─────────────────────────────────────────────────────────────────────────────┘
 //! ```

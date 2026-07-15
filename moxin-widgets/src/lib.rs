@@ -1,9 +1,9 @@
 //! # Moxin Widgets
 //!
-//! Shared reusable UI components for Moxin Translator.
+//! Shared reusable UI components for Hen Local Translator.
 //!
 //! This crate provides the core widget library and plugin infrastructure for building
-//! Moxin Translator using the [Makepad](https://github.com/makepad/makepad) UI framework.
+//! Hen Local Translator using the [Makepad](https://github.com/makepad/makepad) UI framework.
 //!
 //! ## Quick Start
 //!

@@ -1,4 +1,4 @@
-//! Moxin Translator - Standalone Live Translation Application
+//! Hen Local Translator - Standalone Live Translation Application
 //!
 //! A standalone desktop application for real-time speech translation.
 
@@ -7,8 +7,8 @@ mod app;
 use clap::Parser;
 
 #[derive(Parser, Debug, Default, Clone)]
-#[command(name = "moxin-translator")]
-#[command(about = "Moxin Translator - Live Translation")]
+#[command(name = "hen-local-translator")]
+#[command(about = "Hen Local Translator - Live Translation")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct Args {
     /// Log level (trace, debug, info, warn, error)
@@ -35,7 +35,10 @@ fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(args.log_filter()))
         .init();
 
-    log::info!("Starting Moxin Translator v{}", env!("CARGO_PKG_VERSION"));
+    log::info!(
+        "Starting Hen Local Translator v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     log::debug!("CLI args: {:?}", args);
 
     if let Some(ref dataflow) = args.dataflow {

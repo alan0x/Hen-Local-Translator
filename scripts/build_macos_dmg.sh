@@ -7,7 +7,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP_NAME="Moxin Translator"
+APP_NAME="Hen Local Translator"
 APP_PATH="$ROOT_DIR/dist/${APP_NAME}.app"
 OUT_DIR="$ROOT_DIR/dist"
 VERSION=""
@@ -35,7 +35,7 @@ Options:
   --out-dir <dir>     Output directory (default: $OUT_DIR)
   --version <version> Version used for default DMG naming (default: app bundle version)
   --vol-name <name>   DMG volume name (default: "$APP_NAME <version> Installer")
-  --dmg-name <name>   DMG file name (default: Moxin-Translator-v<version>.dmg)
+  --dmg-name <name>   DMG file name (default: Hen-Local-Translator-v<version>.dmg)
   -h, --help          Show this help
 EOF
 }
@@ -94,7 +94,7 @@ if [[ -z "$VOL_NAME" ]]; then
   VOL_NAME="$APP_NAME $VERSION Installer"
 fi
 if [[ -z "$DMG_NAME" ]]; then
-  DMG_NAME="Moxin-Translator-v${VERSION}.dmg"
+  DMG_NAME="Hen-Local-Translator-v${VERSION}.dmg"
 fi
 
 mkdir -p "$OUT_DIR"

@@ -1,6 +1,6 @@
 //! # Moxin UI - Shared Component Library
 //!
-//! Reusable UI components, shell layouts, and infrastructure for Moxin Translator.
+//! Reusable UI components, shell layouts, and infrastructure for Hen Local Translator.
 //!
 //! ## Overview
 //!

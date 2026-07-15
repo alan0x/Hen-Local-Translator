@@ -5,13 +5,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const GITHUB_RELEASE_API: &str =
-    "https://api.github.com/repos/moxin-org/Moxin-Translator/releases/latest";
-const UPDATE_CACHE_DIR_NAME: &str = "MoxinTranslator/updates";
+    "https://api.github.com/repos/Hen-Local/Hen-Local-Translator/releases/latest";
+const UPDATE_CACHE_DIR_NAME: &str = "HenLocalTranslator/updates";
 const INSTALL_SCRIPT_NAME: &str = "macos_install_update.sh";
-const RELEASE_API_ENV: &str = "MOXIN_UPDATE_RELEASE_API";
-const CACHE_DIR_ENV: &str = "MOXIN_UPDATE_CACHE_DIR";
-const INSTALL_SCRIPT_ENV: &str = "MOXIN_UPDATE_INSTALL_SCRIPT";
-const CURRENT_APP_ENV: &str = "MOXIN_UPDATE_CURRENT_APP";
+const RELEASE_API_ENV: &str = "HEN_LOCAL_UPDATE_RELEASE_API";
+const CACHE_DIR_ENV: &str = "HEN_LOCAL_UPDATE_CACHE_DIR";
+const INSTALL_SCRIPT_ENV: &str = "HEN_LOCAL_UPDATE_INSTALL_SCRIPT";
+const CURRENT_APP_ENV: &str = "HEN_LOCAL_UPDATE_CURRENT_APP";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreparedUpdate {
@@ -61,14 +61,14 @@ impl UpdateConfig {
 }
 
 pub fn display_version() -> String {
-    std::env::var("MOXIN_APP_VERSION")
+    std::env::var("HEN_LOCAL_APP_VERSION")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| crate::APP_VERSION.to_string())
 }
 
 pub fn current_app_bundle_path() -> Option<PathBuf> {
-    if let Ok(resources) = std::env::var("MOXIN_APP_RESOURCES") {
+    if let Ok(resources) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
         let resources = PathBuf::from(resources);
         if let Some(contents) = resources.parent() {
             if let Some(app) = contents.parent() {
@@ -117,7 +117,7 @@ fn check_and_prepare_update_with_config(
     fs::create_dir_all(&cache_dir)
         .map_err(|err| format!("failed to create update cache dir: {}", err))?;
 
-    let final_path = cache_dir.join(format!("Moxin-Translator-v{}.dmg", latest_version));
+    let final_path = cache_dir.join(format!("Hen-Local-Translator-v{}.dmg", latest_version));
     cleanup_cached_installers_in_dir(&cache_dir, Some(final_path.as_path()))?;
 
     if final_path.exists() {
@@ -130,7 +130,7 @@ fn check_and_prepare_update_with_config(
         });
     }
 
-    let temp_path = cache_dir.join(format!("Moxin-Translator-v{}.download", latest_version));
+    let temp_path = cache_dir.join(format!("Hen-Local-Translator-v{}.download", latest_version));
     let _ = fs::remove_file(&temp_path);
 
     download_file(&asset.browser_download_url, &temp_path)?;
@@ -163,12 +163,12 @@ fn launch_update_installer_with_config(
         .current_app_override
         .clone()
         .or_else(current_app_bundle_path)
-        .or_else(|| Some(PathBuf::from("/Applications/Moxin Translator.app")));
+        .or_else(|| Some(PathBuf::from("/Applications/Hen Local Translator.app")));
     let mut cmd = Command::new(&script_path);
     cmd.arg("--dmg")
         .arg(&update.dmg_path)
         .arg("--app-name")
-        .arg("Moxin Translator")
+        .arg("Hen Local Translator")
         .arg("--wait-pid")
         .arg(std::process::id().to_string())
         .stdout(Stdio::null())
@@ -192,7 +192,7 @@ fn resolve_install_script_path(config: &UpdateConfig) -> Option<PathBuf> {
         return Some(path);
     }
 
-    if let Ok(resources) = std::env::var("MOXIN_APP_RESOURCES") {
+    if let Ok(resources) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
         let bundled = PathBuf::from(resources)
             .join("scripts")
             .join(INSTALL_SCRIPT_NAME);
@@ -218,7 +218,7 @@ fn fetch_latest_release(config: &UpdateConfig) -> Result<GithubRelease, String> 
             "-H",
             "Accept: application/vnd.github+json",
             "-H",
-            "User-Agent: MoxinTranslatorUpdater",
+            "User-Agent: HenLocalTranslatorUpdater",
         ])
         .arg(&config.release_api)
         .output()
@@ -414,7 +414,7 @@ mod tests {
         let release_json = dir.join("latest.json");
         let dmg_url = format!("file://{}", dmg_path.display());
         let json = format!(
-            "{{\"tag_name\":\"v{}\",\"assets\":[{{\"name\":\"Moxin-Translator-v{}.dmg\",\"browser_download_url\":\"{}\"}}]}}",
+            "{{\"tag_name\":\"v{}\",\"assets\":[{{\"name\":\"Hen-Local-Translator-v{}.dmg\",\"browser_download_url\":\"{}\"}}]}}",
             version, version, dmg_url
         );
         fs::write(&release_json, json).unwrap();
@@ -445,7 +445,7 @@ mod tests {
     fn check_and_prepare_update_downloads_and_reuses_cached_installer() {
         let fixture_dir = TestDir::new("app-update-fixture");
         let cache_dir = TestDir::new("app-update-cache");
-        let source_dmg = fixture_dir.path().join("Moxin-Translator-v0.0.5.dmg");
+        let source_dmg = fixture_dir.path().join("Hen-Local-Translator-v0.0.5.dmg");
         fs::write(&source_dmg, b"fake dmg bytes").unwrap();
         let release_json = write_fake_release(fixture_dir.path(), "0.0.5", &source_dmg);
         let config = test_config(
@@ -478,12 +478,14 @@ mod tests {
     fn check_and_prepare_update_replaces_stale_cached_installer() {
         let fixture_dir = TestDir::new("app-update-fixture");
         let cache_dir = TestDir::new("app-update-cache");
-        let stale = cache_dir.path().join("Moxin-Translator-v0.0.5.dmg");
-        let partial = cache_dir.path().join("Moxin-Translator-v0.0.5.download");
+        let stale = cache_dir.path().join("Hen-Local-Translator-v0.0.5.dmg");
+        let partial = cache_dir
+            .path()
+            .join("Hen-Local-Translator-v0.0.5.download");
         fs::write(&stale, b"stale").unwrap();
         fs::write(&partial, b"partial").unwrap();
 
-        let source_dmg = fixture_dir.path().join("Moxin-Translator-v0.0.6.dmg");
+        let source_dmg = fixture_dir.path().join("Hen-Local-Translator-v0.0.6.dmg");
         fs::write(&source_dmg, b"new").unwrap();
         let release_json = write_fake_release(fixture_dir.path(), "0.0.6", &source_dmg);
         let config = test_config(
@@ -497,7 +499,10 @@ mod tests {
             other => panic!("expected ready outcome, got {:?}", other),
         };
 
-        assert_eq!(new_path.file_name().unwrap(), "Moxin-Translator-v0.0.6.dmg");
+        assert_eq!(
+            new_path.file_name().unwrap(),
+            "Hen-Local-Translator-v0.0.6.dmg"
+        );
         assert!(new_path.exists());
         assert!(!stale.exists());
         assert!(!partial.exists());
@@ -526,10 +531,10 @@ mod tests {
     #[test]
     fn launch_update_installer_uses_override_script_and_current_app() {
         let fixture_dir = TestDir::new("app-update-installer");
-        let dmg_path = fixture_dir.path().join("Moxin-Translator-v0.0.5.dmg");
+        let dmg_path = fixture_dir.path().join("Hen-Local-Translator-v0.0.5.dmg");
         let script_path = fixture_dir.path().join("fake-installer.sh");
         let args_log = fixture_dir.path().join("installer-args.txt");
-        let current_app = fixture_dir.path().join("Moxin Translator.app");
+        let current_app = fixture_dir.path().join("Hen Local Translator.app");
 
         fs::write(&dmg_path, b"fake dmg bytes").unwrap();
         fs::write(

@@ -65,7 +65,7 @@ pub struct DataflowController {
 
 impl DataflowController {
     fn dora_runtime_dir() -> PathBuf {
-        if let Ok(dir) = std::env::var("MOXIN_DORA_RUNTIME_DIR") {
+        if let Ok(dir) = std::env::var("HEN_LOCAL_DORA_RUNTIME_DIR") {
             return PathBuf::from(dir);
         }
         if let Ok(home) = std::env::var("HOME") {

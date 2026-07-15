@@ -1,6 +1,6 @@
-//! # moxin-init
+//! # hen-local-init
 //!
-//! First-run model downloader for Moxin Translator.
+//! First-run model downloader for Hen Local Translator.
 //! Replaces the conda/Python bootstrap: downloads ASR and translator models
 //! directly via HTTP, with ModelScope as the default provider and Hugging Face
 //! available as a fallback.
@@ -11,7 +11,7 @@
 //!
 //! | Variable                          | Default                                              |
 //! |-----------------------------------|------------------------------------------------------|
-//! | `MOXIN_BOOTSTRAP_STATE_PATH`      | (no state file written)                              |
+//! | `HEN_LOCAL_BOOTSTRAP_STATE_PATH`      | (no state file written)                              |
 //! | `QWEN3_ASR_MODEL_PATH`            | `~/.OminiX/models/qwen3-asr-1.7b`                    |
 //! | `QWEN3_ASR_REPO`                  | `mlx-community/Qwen3-ASR-1.7B-8bit`                 |
 //! | `QWEN35_TRANSLATOR_MODEL_PATH`    | `~/.OminiX/models/Qwen3.5-2B-MLX-4bit`              |
@@ -44,7 +44,7 @@ const MODEL_COMPLETION_MARKER: &str = ".moxin-model-complete.json";
 const BOOTSTRAP_VERSION: u32 = 1;
 const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
 const DEFAULT_MODELSCOPE_ENDPOINT: &str = "https://modelscope.cn";
-const HTTP_USER_AGENT: &str = "MoxinTranslator/moxin-init";
+const HTTP_USER_AGENT: &str = "HenLocalTranslator/hen-local-init";
 const PROVIDER_PROBE_REPO: &str = "mlx-community/Qwen3.5-2B-MLX-4bit";
 const PROVIDER_PROBE_FILE: &str = "config.json";
 const BOOTSTRAP_LOCK_FILE: &str = "bootstrap.lock";
@@ -94,7 +94,7 @@ fn write_state(
         0.0
     };
     eprintln!(
-        "[moxin-init] {}/{} {} — {} ({:.1}%)",
+        "[hen-local-init] {}/{} {} — {} ({:.1}%)",
         current,
         total,
         title,
@@ -195,7 +195,7 @@ fn acquire_bootstrap_lock(path: &Path) -> Result<BootstrapLock> {
             Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {
                 if bootstrap_lock_is_active(path) {
                     bail!(
-                        "another moxin-init bootstrap is already running; lock: {}",
+                        "another hen-local-init bootstrap is already running; lock: {}",
                         path.display()
                     );
                 }
@@ -253,7 +253,7 @@ fn ensure_model_dir_ready(
     if ready_check(dir) {
         if !model_completion_marker_valid(dir, repo_id) {
             eprintln!(
-                "[moxin-init] complete model found without a valid marker, writing {}",
+                "[hen-local-init] complete model found without a valid marker, writing {}",
                 dir.display()
             );
             write_model_completion_marker(dir, repo_id)?;
@@ -263,7 +263,7 @@ fn ensure_model_dir_ready(
 
     if model_completion_marker_valid(dir, repo_id) {
         eprintln!(
-            "[moxin-init] marker present but model is incomplete, clearing {}",
+            "[hen-local-init] marker present but model is incomplete, clearing {}",
             dir.display()
         );
         if dir.exists() {
@@ -275,7 +275,7 @@ fn ensure_model_dir_ready(
 
     if dir.exists() {
         eprintln!(
-            "[moxin-init] model directory without a valid completion marker, removing {}",
+            "[hen-local-init] model directory without a valid completion marker, removing {}",
             dir.display()
         );
         fs::remove_dir_all(dir)
@@ -343,10 +343,10 @@ impl DownloadProvider {
                 let modelscope_probe = probe_provider(&probe_client, &modelscope);
                 let huggingface_probe = probe_provider(&probe_client, &huggingface);
                 if let Err(err) = &modelscope_probe {
-                    eprintln!("[moxin-init] ModelScope probe failed: {err:#}");
+                    eprintln!("[hen-local-init] ModelScope probe failed: {err:#}");
                 }
                 if let Err(err) = &huggingface_probe {
-                    eprintln!("[moxin-init] Hugging Face probe failed: {err:#}");
+                    eprintln!("[hen-local-init] Hugging Face probe failed: {err:#}");
                 }
                 let order =
                     auto_provider_order(modelscope_probe.is_ok(), huggingface_probe.is_ok())?;
@@ -454,7 +454,7 @@ fn run_with_provider_fallback(
             Ok(()) => return Ok(()),
             Err(err) => {
                 eprintln!(
-                    "[moxin-init] {} failed via {}: {:#}",
+                    "[hen-local-init] {} failed via {}: {:#}",
                     operation_name,
                     provider.name(),
                     err
@@ -659,7 +659,7 @@ fn download_file_with_retries(
                 if attempt < MAX_DOWNLOAD_FILE_ATTEMPTS && should_retry_download_error(&err) =>
             {
                 eprintln!(
-                    "[moxin-init] retrying {}/{} via {} after transient download error (attempt {}/{}): {:#}",
+                    "[hen-local-init] retrying {}/{} via {} after transient download error (attempt {}/{}): {:#}",
                     repo_id,
                     filename,
                     provider.name(),
@@ -696,7 +696,7 @@ fn download_repo(
 
     let short_name = repo_id.split('/').last().unwrap_or(repo_id);
     eprintln!(
-        "[moxin-init] listing files for {} via {}",
+        "[hen-local-init] listing files for {} via {}",
         repo_id,
         provider.name()
     );
@@ -704,16 +704,16 @@ fn download_repo(
     let files = list_repo_files(client, provider, repo_id)
         .with_context(|| format!("list files for {}", repo_id))?;
 
-    eprintln!("[moxin-init] {} file(s) in {}", files.len(), repo_id);
+    eprintln!("[hen-local-init] {} file(s) in {}", files.len(), repo_id);
 
     for (i, filename) in files.iter().enumerate() {
         let dest = target_dir.join(filename);
         if dest.exists() && dest.metadata().map(|m| m.len()).unwrap_or(0) > 0 {
-            eprintln!("[moxin-init] skip (exists): {}", filename);
+            eprintln!("[hen-local-init] skip (exists): {}", filename);
             continue;
         }
         eprintln!(
-            "[moxin-init] downloading [{}/{}]: {}",
+            "[hen-local-init] downloading [{}/{}]: {}",
             i + 1,
             files.len(),
             filename
@@ -823,7 +823,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("moxin-init-{name}-{nanos}"));
+        let dir = std::env::temp_dir().join(format!("hen-local-init-{name}-{nanos}"));
         fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -993,7 +993,7 @@ mod tests {
         let headers = rx.recv().unwrap().join("");
         let headers_lower = headers.to_ascii_lowercase();
         assert!(
-            headers_lower.contains("user-agent: moxintranslator/moxin-init"),
+            headers_lower.contains("user-agent: moxintranslator/hen-local-init"),
             "request headers did not contain the expected User-Agent:\n{headers}"
         );
     }
@@ -1172,7 +1172,7 @@ fn bootstrap_lock_path(cfg: &Config) -> PathBuf {
         .unwrap_or_else(|| {
             dirs::home_dir()
                 .unwrap_or_else(|| PathBuf::from("."))
-                .join("Library/Logs/MoxinTranslator")
+                .join("Library/Logs/HenLocalTranslator")
                 .join(BOOTSTRAP_LOCK_FILE)
         })
 }
@@ -1181,7 +1181,7 @@ fn resolve_config() -> Config {
     let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
 
     Config {
-        state_file: env::var("MOXIN_BOOTSTRAP_STATE_PATH")
+        state_file: env::var("HEN_LOCAL_BOOTSTRAP_STATE_PATH")
             .ok()
             .map(PathBuf::from),
         asr_dir: env::var("QWEN3_ASR_MODEL_PATH")
@@ -1210,7 +1210,7 @@ fn main() -> Result<()> {
         .map(|provider| provider.name())
         .collect::<Vec<_>>()
         .join(" -> ");
-    eprintln!("[moxin-init] model provider order: {}", provider_names);
+    eprintln!("[hen-local-init] model provider order: {}", provider_names);
 
     // 2 potential downloads: Qwen3.5 translator and ASR.
     let total: usize = 2;
@@ -1243,7 +1243,7 @@ fn main() -> Result<()> {
 
     // ── Step 1: Qwen3.5 translator (required) ─────────────────────────────────
     if translator_ready {
-        eprintln!("[moxin-init] Qwen3.5 translator model already ready, skipping");
+        eprintln!("[hen-local-init] Qwen3.5 translator model already ready, skipping");
         write_state(
             state_file,
             1,
@@ -1278,12 +1278,12 @@ fn main() -> Result<()> {
         )
         .with_context(|| "Qwen3.5 translator download failed")?;
         write_model_completion_marker(&cfg.qwen35_translator_dir, &cfg.qwen35_translator_repo)?;
-        eprintln!("[moxin-init] Qwen3.5 translator download complete");
+        eprintln!("[hen-local-init] Qwen3.5 translator download complete");
     }
 
     // ── Step 2: ASR (required) ─────────────────────────────────────────────────
     if asr_ready {
-        eprintln!("[moxin-init] ASR model already ready, skipping");
+        eprintln!("[hen-local-init] ASR model already ready, skipping");
         write_state(
             state_file,
             2,
@@ -1318,7 +1318,7 @@ fn main() -> Result<()> {
         )
         .with_context(|| "ASR model download failed")?;
         write_model_completion_marker(&cfg.asr_dir, &cfg.asr_repo)?;
-        eprintln!("[moxin-init] ASR download complete");
+        eprintln!("[hen-local-init] ASR download complete");
     }
 
     write_state(
@@ -1330,6 +1330,6 @@ fn main() -> Result<()> {
         TOTAL_BYTES,
         TOTAL_BYTES,
     );
-    println!("[moxin-init] initialization complete");
+    println!("[hen-local-init] initialization complete");
     Ok(())
 }

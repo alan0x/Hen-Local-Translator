@@ -1,6 +1,6 @@
 # dora-common
 
-Common utilities for Dora nodes in Moxin Translator.
+Common utilities for Dora nodes in Hen Local Translator.
 
 ## Overview
 

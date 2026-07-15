@@ -1,5 +1,5 @@
 [package]
-name = "moxin-translator"
+name = "hen-local-translator"
 version.workspace = true
 edition.workspace = true
 

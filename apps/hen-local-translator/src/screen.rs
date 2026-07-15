@@ -31,7 +31,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const MOXIN_VOICE_BUNDLE_ID: &str = "com.moxin.translator";
+const HEN_LOCAL_TRANSLATOR_BUNDLE_ID: &str = "com.henlocal.translator";
 const BOOTSTRAP_LOCK_FILE: &str = "bootstrap.lock";
 const SPOKEN_TRANSLATION_SAMPLE_RATE: u32 = 24000;
 
@@ -1964,7 +1964,7 @@ live_design! {
                         logo_image = <Image> {
                             width: 52, height: 52
                             margin: {bottom: 4}
-                            source: dep("crate://moxin-widgets/resources/moxin_icon_fixed.png")
+                            source: dep("crate://moxin-widgets/resources/hen_local_icon.png")
                             fit: Smallest
                         }
 
@@ -1974,7 +1974,7 @@ live_design! {
                                 text_style: <FONT_BOLD>{ font_size: 17.0 }
                                 fn get_color(self) -> vec4 { return vec4(1.0, 1.0, 1.0, 0.95); }
                             }
-                            text: "Moxin Translator"
+                            text: "Hen Local Translator"
                         }
 
                         logo_subtitle = <Label> {
@@ -6682,7 +6682,7 @@ live_design! {
 
                                 about_version_label = <SettingsBodyLabel> {
                                     width: Fill, height: Fit
-                                    text: "Moxin Translator"
+                                    text: "Hen Local Translator"
                                 }
 
                                 about_install_update_wrap = <View> {
@@ -6717,7 +6717,7 @@ live_design! {
                                             return mix(light, dark, self.dark_mode);
                                         }
                                     }
-                                    text: "github.com/moxin-org/Moxin-Translator"
+                                    text: "github.com/Hen-Local/Hen-Local-Translator"
                                 }
                             }
 
@@ -6769,7 +6769,7 @@ live_design! {
                             page_logo = <Image> {
                                 width: 36, height: 36
                                 margin: {right: 12}
-                                source: dep("crate://moxin-widgets/resources/moxin_icon_fixed.png")
+                                source: dep("crate://moxin-widgets/resources/hen_local_icon.png")
                                 fit: Smallest
                             }
 
@@ -6788,7 +6788,7 @@ live_design! {
                                             return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
                                         }
                                     }
-                                    text: "Moxin Translator"
+                                    text: "Hen Local Translator"
                                 }
 
                                 page_tagline = <Label> {
@@ -6858,6 +6858,12 @@ live_design! {
                                 align: {y: 0.5}
                                 spacing: 12
                                 margin: {left: 20}
+
+                                open_transcript_history_btn = <SettingsActionBtn> {
+                                    width: Fit, height: 34
+                                    padding: {left: 12, right: 12}
+                                    text: "Open Transcript History"
+                                }
 
                                 translation_language_controls = <ToolbarSegmentGroup> {
 
@@ -7691,7 +7697,7 @@ live_design! {
                                                     }
                                                     wrap: Word
                                                 }
-                                                text: "Local Moxin/Qwen voices · Preview in list"
+                                                text: "Local Qwen voices · Preview in list"
                                             }
                                         }
 
@@ -7745,7 +7751,7 @@ live_design! {
                                             }
                                             wrap: Word
                                         }
-                                        text: "Screen recording permission not granted. Go to System Settings → Privacy & Security → Screen Recording, enable Moxin Translator, then restart the app."
+                                        text: "Screen recording permission not granted. Go to System Settings → Privacy & Security → Screen Recording, enable Hen Local Translator, then restart the app."
                                     }
                                 }
                             } // End translation_settings_panel
@@ -7839,7 +7845,7 @@ live_design! {
                                             return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
                                         }
                                     }
-                                text: "Moxin Translator"
+                                text: "Hen Local Translator"
                                 }
 
                                 about_page_version = <Label> {
@@ -7880,7 +7886,7 @@ live_design! {
                                                 return mix(light, dark, self.dark_mode);
                                             }
                                         }
-                                        text: "github.com/moxin-org/Moxin-Translator"
+                                        text: "github.com/Hen-Local/Hen-Local-Translator"
                                     }
                                 }
 
@@ -9777,7 +9783,7 @@ live_design! {
                                     return mix((TEXT_SECONDARY), (TEXT_SECONDARY_DARK), self.dark_mode);
                                 }
                             }
-                            text: "Moxin Translator"
+                            text: "Hen Local Translator"
                         }
 
                         about_engine = <Label> {
@@ -9863,7 +9869,7 @@ live_design! {
                                     return (WHITE);
                                 }
                             }
-                            text: "Moxin Translator"
+                            text: "Hen Local Translator"
                         }
 
                         loading_subtitle = <Label> {
@@ -10623,7 +10629,7 @@ impl Widget for TTSScreen {
             self.update_translation_overlay_style_buttons(cx);
             // Add initial log entries
             self.log_entries
-                .push("[INFO] [translation] Moxin Translator initialized".to_string());
+                .push("[INFO] [translation] Hen Local Translator initialized".to_string());
             self.log_entries
                 .push("[INFO] [translation] Ready for live translation".to_string());
             self.log_entries
@@ -10660,6 +10666,9 @@ impl Widget for TTSScreen {
         // no longer auto-starts the legacy TTS dataflow in the background.
         if self.runtime_init_state == RuntimeInitState::Idle {
             self.start_runtime_initialization(cx);
+        }
+        if self.runtime_init_state == RuntimeInitState::Ready && !self.loading_dismissed {
+            self.dismiss_loading_overlay(cx);
         }
 
         if self.translation_dora.is_none() {
@@ -11087,12 +11096,7 @@ impl Widget for TTSScreen {
                     self.view
                         .view(ids!(loading_overlay.loading_progress_container))
                         .set_visible(cx, false);
-                    self.loading_dismissed = true;
-                    self.view.view(ids!(loading_overlay)).set_visible(cx, false);
-                    self.add_log(cx, "[INFO] [startup] Translation UI ready");
-                    if let Some(message) = self.pending_app_update_toast.take() {
-                        self.show_toast(cx, &message);
-                    }
+                    self.dismiss_loading_overlay(cx);
                 } else {
                     let startup_detail =
                         self.tr("正在准备翻译引擎", "Preparing translation engine");
@@ -11871,7 +11875,7 @@ impl Widget for TTSScreen {
                 .finger_up(&actions)
                 .is_some()
             {
-                Self::open_url("https://github.com/moxin-org/Moxin-Translator");
+                Self::open_url("https://github.com/Hen-Local/Hen-Local-Translator");
             }
             if card
                 .view(ids!(about_page_ominix_link))
@@ -13169,6 +13173,47 @@ impl Widget for TTSScreen {
             self.view.redraw(cx);
         }
 
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .open_transcript_history_btn
+            ))
+            .clicked(&actions)
+        {
+            let transcript_dir = self.transcript_save_dir_from_preferences();
+            match Self::open_path_in_finder(&transcript_dir) {
+                Ok(()) => self.add_translation_log(
+                    cx,
+                    &format!(
+                        "[INFO] {}: {}",
+                        self.tr("已打开转录记录目录", "Opened transcript history"),
+                        transcript_dir.display()
+                    ),
+                ),
+                Err(err) => {
+                    self.add_translation_log(
+                        cx,
+                        &format!(
+                            "[ERROR] {}: {}",
+                            self.tr("无法打开转录记录目录", "Could not open transcript history"),
+                            err
+                        ),
+                    );
+                    self.show_toast(
+                        cx,
+                        self.tr("无法打开转录记录目录", "Could not open transcript history"),
+                    );
+                }
+            }
+        }
+
         // Handle language selection in global settings
         if self
             .view
@@ -14139,7 +14184,7 @@ impl Widget for TTSScreen {
                 .area();
             if let Hit::FingerUp(fe) = event.hits(cx, moxin_area) {
                 if fe.was_tap() {
-                    Self::open_url("https://github.com/moxin-org/Moxin-Translator");
+                    Self::open_url("https://github.com/Hen-Local/Hen-Local-Translator");
                 }
             }
             if let Hit::FingerUp(fe) = event.hits(cx, ominix_area) {
@@ -14603,8 +14648,8 @@ impl Widget for TTSScreen {
                     self.show_toast(
                         cx,
                         self.tr(
-                            "请先点击“Start Moxin”按钮初始化数据流",
-                            "Please click 'Start Moxin' button first to initialize the dataflow",
+                            "请先启动 Hen Local 翻译引擎",
+                            "Please start the Hen Local translation engine first",
                         ),
                     );
                 } else {
@@ -15798,17 +15843,20 @@ impl TTSScreen {
     }
 
     fn transcript_save_path_from_preferences(&self) -> PathBuf {
-        let dir = self
-            .app_preferences
+        self.transcript_save_dir_from_preferences()
+            .join(Self::normalize_transcript_file_name(
+                &self.app_preferences.translation_transcript_file_name,
+            ))
+    }
+
+    fn transcript_save_dir_from_preferences(&self) -> PathBuf {
+        self.app_preferences
             .translation_transcript_save_dir
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
-            .unwrap_or_else(Self::transcript_default_save_dir);
-        dir.join(Self::normalize_transcript_file_name(
-            &self.app_preferences.translation_transcript_file_name,
-        ))
+            .unwrap_or_else(Self::transcript_default_save_dir)
     }
 
     fn transcript_timestamp() -> String {
@@ -15862,7 +15910,7 @@ impl TTSScreen {
         let has_ready_update = self.ready_update().is_some();
         let settings_label = self.tr("设置", "Settings");
         let update_badge = self.tr("新版本", "Update");
-        let version_label = format!("Moxin Translator v{}", self.current_display_version());
+        let version_label = format!("Hen Local Translator v{}", self.current_display_version());
 
         self.view
             .label(ids!(
@@ -16033,10 +16081,10 @@ impl TTSScreen {
                 previous_label, current
             ));
 
-            match Self::reset_screen_capture_permission_decision(MOXIN_VOICE_BUNDLE_ID) {
+            match Self::reset_screen_capture_permission_decision(HEN_LOCAL_TRANSLATOR_BUNDLE_ID) {
                 Ok(()) => self.log_entries.push(format!(
                     "[INFO] [privacy] Reset ScreenCapture permission decision for {}",
-                    MOXIN_VOICE_BUNDLE_ID
+                    HEN_LOCAL_TRANSLATOR_BUNDLE_ID
                 )),
                 Err(err) => self.log_entries.push(format!(
                     "[WARN] [privacy] Failed to reset ScreenCapture permission decision: {}",
@@ -16079,7 +16127,7 @@ impl TTSScreen {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("Library")
             .join("Logs")
-            .join("MoxinTranslator")
+            .join("HenLocalTranslator")
     }
 
     fn models_dir() -> PathBuf {
@@ -16091,7 +16139,7 @@ impl TTSScreen {
     }
 
     fn dora_runtime_dir() -> PathBuf {
-        std::env::var("MOXIN_DORA_RUNTIME_DIR")
+        std::env::var("HEN_LOCAL_DORA_RUNTIME_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
                 dirs::home_dir()
@@ -16159,7 +16207,7 @@ impl TTSScreen {
     }
 
     fn resolve_qwen_download_script_path() -> Option<PathBuf> {
-        if let Ok(resources) = std::env::var("MOXIN_APP_RESOURCES") {
+        if let Ok(resources) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
             let bundled = PathBuf::from(resources)
                 .join("scripts")
                 .join("download_qwen3_tts_models.py");
@@ -16537,7 +16585,7 @@ impl TTSScreen {
             ))
             .set_text(
                 cx,
-                &format!("Moxin Translator v{}", self.current_display_version()),
+                &format!("Hen Local Translator v{}", self.current_display_version()),
             );
         let voice = self
             .selected_voice_id
@@ -16940,7 +16988,7 @@ impl TTSScreen {
     }
 
     fn translation_brand_title(&self) -> &'static str {
-        self.tr("Moxin 实时翻译", "Moxin Translator")
+        self.tr("Hen Local 实时翻译", "Hen Local Translator")
     }
 
     fn translation_brand_tagline(&self) -> &'static str {
@@ -17034,6 +17082,18 @@ impl TTSScreen {
                     .quick_lang_zh_btn
             ))
             .set_text(cx, "中文");
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .open_transcript_history_btn
+            ))
+            .set_text(cx, self.tr("打开转录记录", "Open Transcript History"));
         self.view
             .button(ids!(
                 content_wrapper
@@ -17493,8 +17553,8 @@ impl TTSScreen {
             .set_text(
                 cx,
                 self.tr(
-                    "本地 Moxin/Qwen 音色 · 可直接试听",
-                    "Local Moxin/Qwen voices · Preview in list",
+                    "本地 Qwen 音色 · 可直接试听",
+                    "Local Qwen voices · Preview in list",
                 ),
             );
         self.view
@@ -17525,8 +17585,8 @@ impl TTSScreen {
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.translation_permission_hint.translation_permission_hint_label
             ))
             .set_text(cx, self.tr(
-                "屏幕录制权限未授权。请前往系统设置 → 隐私与安全性 → 屏幕录制，启用 Moxin 实时翻译，然后重启应用。",
-                "Screen recording permission not granted. Go to System Settings → Privacy & Security → Screen Recording, enable Moxin Translator, then restart the app.",
+                "屏幕录制权限未授权。请前往系统设置 → 隐私与安全性 → 屏幕录制，启用 Hen Local 实时翻译，然后重启应用。",
+                "Screen recording permission not granted. Go to System Settings → Privacy & Security → Screen Recording, enable Hen Local Translator, then restart the app.",
             ));
         self.update_translation_settings_layout_for_locale(cx);
         self.update_translation_lang_dropdowns(cx);
@@ -21110,7 +21170,7 @@ impl TTSScreen {
 
     /// Resolve the path for a legacy built-in voice preview WAV file.
     fn resolve_qwen_preview_path(&self, filename: &str) -> PathBuf {
-        if let Ok(res) = std::env::var("MOXIN_APP_RESOURCES") {
+        if let Ok(res) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
             let p = PathBuf::from(&res).join("qwen3-previews").join(filename);
             if p.exists() {
                 return p;
@@ -21128,7 +21188,7 @@ impl TTSScreen {
     /// voice_id: e.g. "baiyang", filename: e.g. "ref.wav"
     fn resolve_bundled_icl_ref_path(&self, voice_id: &str, filename: &str) -> Option<PathBuf> {
         // 1. App bundle
-        if let Ok(res) = std::env::var("MOXIN_APP_RESOURCES") {
+        if let Ok(res) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
             let p = PathBuf::from(&res)
                 .join("qwen3-voices")
                 .join(voice_id)
@@ -21535,7 +21595,7 @@ impl TTSScreen {
         let qwen_root = Self::qwen_root_dir();
         let log_dir = PathBuf::from(
             std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
-                + "/Library/Logs/MoxinTranslator",
+                + "/Library/Logs/HenLocalTranslator",
         );
         let _ = std::fs::create_dir_all(&log_dir);
         let qwen_log = log_dir.join("qwen_model_download.log");
@@ -21572,7 +21632,7 @@ impl TTSScreen {
                     .unwrap_or_else(|| {
                         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
                         let env = std::env::var("MOXIN_CONDA_ENV")
-                            .unwrap_or_else(|_| "moxin-translator".to_string());
+                            .unwrap_or_else(|_| "hen-local-translator".to_string());
                         format!("{}/.moxinvoice/conda/envs/{}", home, env)
                     });
 
@@ -21710,7 +21770,7 @@ impl TTSScreen {
     fn start_runtime_initialization(&mut self, cx: &mut Cx) {
         Self::ensure_bundle_bin_on_path();
 
-        let app_resources = match std::env::var("MOXIN_APP_RESOURCES") {
+        let app_resources = match std::env::var("HEN_LOCAL_APP_RESOURCES") {
             Ok(v) => PathBuf::from(v),
             Err(_) => {
                 // Dev mode default: skip bootstrap/preflight unless explicitly enabled.
@@ -21749,7 +21809,7 @@ impl TTSScreen {
 
         let log_dir = PathBuf::from(
             std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
-                + "/Library/Logs/MoxinTranslator",
+                + "/Library/Logs/HenLocalTranslator",
         );
         let _ = std::fs::create_dir_all(&log_dir);
         let bootstrap_log = log_dir.join("bootstrap.log");
@@ -21792,7 +21852,7 @@ impl TTSScreen {
             });
 
             let pre_ok = Command::new(&pre)
-                .env("MOXIN_APP_RESOURCES", &app_resources_env)
+                .env("HEN_LOCAL_APP_RESOURCES", &app_resources_env)
                 .env("MOXIN_INFERENCE_BACKEND", &inference_backend)
                 .env("MOXIN_ZERO_SHOT_BACKEND", &zero_shot_backend)
                 .arg("--quick")
@@ -21822,7 +21882,7 @@ impl TTSScreen {
                 send_bootstrap_state_update(&bootstrap_state, &mut last_state, &tx);
 
                 let pre_ok = Command::new(&pre)
-                    .env("MOXIN_APP_RESOURCES", &app_resources_env)
+                    .env("HEN_LOCAL_APP_RESOURCES", &app_resources_env)
                     .env("MOXIN_INFERENCE_BACKEND", &inference_backend)
                     .env("MOXIN_ZERO_SHOT_BACKEND", &zero_shot_backend)
                     .arg("--quick")
@@ -21875,10 +21935,10 @@ impl TTSScreen {
             };
 
             let mut child = match Command::new(&boot)
-                .env("MOXIN_APP_RESOURCES", &app_resources_env)
+                .env("HEN_LOCAL_APP_RESOURCES", &app_resources_env)
                 .env("MOXIN_INFERENCE_BACKEND", &inference_backend)
                 .env("MOXIN_ZERO_SHOT_BACKEND", &zero_shot_backend)
-                .env("MOXIN_BOOTSTRAP_STATE_PATH", &bootstrap_state)
+                .env("HEN_LOCAL_BOOTSTRAP_STATE_PATH", &bootstrap_state)
                 .stdout(Stdio::from(log_file))
                 .stderr(Stdio::from(log_file_err))
                 .spawn()
@@ -21975,6 +22035,19 @@ impl TTSScreen {
                 RuntimeInitEvent::Stage { .. } => unreachable!(),
             }
         }
+    }
+
+    fn dismiss_loading_overlay(&mut self, cx: &mut Cx) {
+        if self.loading_dismissed {
+            return;
+        }
+        self.loading_dismissed = true;
+        self.view.view(ids!(loading_overlay)).set_visible(cx, false);
+        self.add_log(cx, "[INFO] [startup] Translation UI ready");
+        if let Some(message) = self.pending_app_update_toast.take() {
+            self.show_toast(cx, &message);
+        }
+        self.view.redraw(cx);
     }
 
     fn runtime_init_progress_for_display(&self) -> f64 {
@@ -22147,7 +22220,7 @@ impl TTSScreen {
             return env_path;
         }
 
-        let app_resources = std::env::var("MOXIN_APP_RESOURCES")
+        let app_resources = std::env::var("HEN_LOCAL_APP_RESOURCES")
             .ok()
             .map(PathBuf::from)
             .filter(|p| p.exists());
@@ -22159,7 +22232,7 @@ impl TTSScreen {
         }
 
         [
-            PathBuf::from("apps/moxin-translator/dataflow/translation_qwen35.yml"),
+            PathBuf::from("apps/hen-local-translator/dataflow/translation_qwen35.yml"),
             dirs::home_dir()
                 .unwrap_or_default()
                 .join(".OminiX/dataflows/translation_qwen35.yml"),
@@ -23099,8 +23172,7 @@ impl TTSScreen {
                 let t = i as f32 / sr;
                 let attack = (i as f32 / (sr * 0.01)).min(1.0);
                 let release = (1.0 - i as f32 / n as f32).powf(0.6);
-                samples
-                    .push((t * freq * std::f32::consts::TAU).sin() * 0.4 * attack * release);
+                samples.push((t * freq * std::f32::consts::TAU).sin() * 0.4 * attack * release);
             }
         }
         self.ensure_spoken_translation_player();
@@ -24377,8 +24449,10 @@ impl TTSScreen {
         }
         dirs::home_dir()
             .map(|home| {
-                home.join(".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit/config.json")
-                    .exists()
+                home.join(
+                    ".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit/config.json",
+                )
+                .exists()
             })
             .unwrap_or(false)
     }
@@ -24539,7 +24613,7 @@ impl TTSScreen {
         if !is_running {
             self.add_log(
                 cx,
-                "[WARN] [tts] Bridge not connected. Please start Moxin first.",
+                "[WARN] [tts] Bridge not connected. Please start the Hen Local translation engine first.",
             );
             return;
         }
@@ -25914,6 +25988,24 @@ impl TTSScreen {
                     .settings_flyout
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .open_transcript_history_btn
+            ))
+            .apply_over(
+                cx,
+                live! {
+                    draw_bg: { dark_mode: (dark_mode) }
+                    draw_text: { dark_mode: (dark_mode) }
+                },
+            );
         self.view
             .view(ids!(
                 content_wrapper

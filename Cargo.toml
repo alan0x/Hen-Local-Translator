@@ -1,12 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "moxin-translator-shell",
+    "hen-local-translator-shell",
     "moxin-widgets",
     "moxin-dora-bridge",
     "moxin-ui",
-    "moxin-init",
-    "apps/moxin-translator",
+    "hen-local-init",
+    "apps/hen-local-translator",
     "node-hub/dora-qwen3-asr",
     "node-hub/dora-qwen35-translator",
     "node-hub/dora-qwen3-tts-mlx",

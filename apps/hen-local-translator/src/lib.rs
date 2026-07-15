@@ -1,4 +1,4 @@
-//! Moxin Translator App - live speech translation.
+//! Hen Local Translator App - live speech translation.
 
 /// User-facing app version shown in the About panel and release artifacts.
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -35,14 +35,14 @@ pub use screen::TTSScreenWidgetRefExt;
 use makepad_widgets::Cx;
 use moxin_widgets::{AppInfo, MoxinApp};
 
-/// Moxin Translator app descriptor.
-pub struct MoxinTranslatorApp;
+/// Hen Local Translator app descriptor.
+pub struct HenLocalTranslatorApp;
 
-impl MoxinApp for MoxinTranslatorApp {
+impl MoxinApp for HenLocalTranslatorApp {
     fn info() -> AppInfo {
         AppInfo {
             name: "Live Translation",
-            id: "moxin-translator",
+            id: "hen-local-translator",
             description: "Real-time speech translation with floating subtitles",
             ..Default::default()
         }
@@ -68,5 +68,5 @@ pub fn init() {
 
 /// Register translator widgets with Makepad.
 pub fn live_design(cx: &mut Cx) {
-    MoxinTranslatorApp::live_design(cx);
+    HenLocalTranslatorApp::live_design(cx);
 }

@@ -9,11 +9,11 @@ MODE="fake-install"
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") --app </path/to/Moxin Translator.app> --dmg </path/to/update.dmg> --version <x.y.z> [--mode fake-install|real-install]
+  $(basename "$0") --app </path/to/Hen Local Translator.app> --dmg </path/to/update.dmg> --version <x.y.z> [--mode fake-install|real-install]
 
 Examples:
-  $(basename "$0") --app "/Applications/Moxin Translator.app" --dmg "./dist/Moxin-Translator-v0.0.6.dmg" --version 0.0.6
-  $(basename "$0") --app "./dist/Moxin Translator.app" --dmg "./dist/Moxin-Translator-v0.0.6.dmg" --version 0.0.6 --mode real-install
+  $(basename "$0") --app "/Applications/Hen Local Translator.app" --dmg "./dist/Hen-Local-Translator-v0.0.6.dmg" --version 0.0.6
+  $(basename "$0") --app "./dist/Hen Local Translator.app" --dmg "./dist/Hen-Local-Translator-v0.0.6.dmg" --version 0.0.6 --mode real-install
 EOF
 }
 
@@ -64,7 +64,7 @@ fi
 
 APP_PATH="$(cd "$(dirname "$APP_PATH")" && pwd)/$(basename "$APP_PATH")"
 DMG_PATH="$(cd "$(dirname "$DMG_PATH")" && pwd)/$(basename "$DMG_PATH")"
-APP_LAUNCHER="$APP_PATH/Contents/MacOS/moxin-translator"
+APP_LAUNCHER="$APP_PATH/Contents/MacOS/hen-local-translator"
 
 if [[ ! -x "$APP_LAUNCHER" ]]; then
   echo "App launcher not found or not executable: $APP_LAUNCHER" >&2
@@ -82,7 +82,7 @@ APP_STDERR="$TEST_ROOT/app.stderr.log"
 mkdir -p "$CACHE_DIR"
 
 cat > "$RELEASE_JSON" <<EOF
-{"tag_name":"v$VERSION","assets":[{"name":"Moxin-Translator-v$VERSION.dmg","browser_download_url":"file://$DMG_PATH"}]}
+{"tag_name":"v$VERSION","assets":[{"name":"Hen-Local-Translator-v$VERSION.dmg","browser_download_url":"file://$DMG_PATH"}]}
 EOF
 
 cat > "$INSTALL_SCRIPT" <<EOF
@@ -114,16 +114,16 @@ echo "Launching app..."
 
 if [[ -n "$UPDATE_SCRIPT" ]]; then
   env \
-    MOXIN_UPDATE_RELEASE_API="file://$RELEASE_JSON" \
-    MOXIN_UPDATE_CACHE_DIR="$CACHE_DIR" \
-    MOXIN_UPDATE_INSTALL_SCRIPT="$UPDATE_SCRIPT" \
+    HEN_LOCAL_UPDATE_RELEASE_API="file://$RELEASE_JSON" \
+    HEN_LOCAL_UPDATE_CACHE_DIR="$CACHE_DIR" \
+    HEN_LOCAL_UPDATE_INSTALL_SCRIPT="$UPDATE_SCRIPT" \
     "$APP_LAUNCHER" \
     >"$APP_STDOUT" \
     2>"$APP_STDERR" &
 else
   env \
-    MOXIN_UPDATE_RELEASE_API="file://$RELEASE_JSON" \
-    MOXIN_UPDATE_CACHE_DIR="$CACHE_DIR" \
+    HEN_LOCAL_UPDATE_RELEASE_API="file://$RELEASE_JSON" \
+    HEN_LOCAL_UPDATE_CACHE_DIR="$CACHE_DIR" \
     "$APP_LAUNCHER" \
     >"$APP_STDOUT" \
     2>"$APP_STDERR" &

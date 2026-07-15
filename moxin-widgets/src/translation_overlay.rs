@@ -17,7 +17,7 @@
 //! │  [pending ASR text - small, amber]           │  ↓
 //! │  (bottom_spacer — dynamic, for anchor)       │
 //! ├──────────────────────────────────────────────┤
-//! │              Moxin Translator - ...          │  footer (font configurable)
+//! │              Hen Local Translator - ...          │  footer (font configurable)
 //! └──────────────────────────────────────────────┘
 //! ```
 //!
@@ -121,7 +121,7 @@ live_design! {
 
                 footer_logo = <Image> {
                     width: 22, height: 22
-                    source: dep("crate://self/resources/moxin_icon_fixed.png")
+                    source: dep("crate://self/resources/hen_local_icon.png")
                     fit: Smallest
                 }
 
@@ -131,7 +131,7 @@ live_design! {
                         color: (MOXIN_TEXT_MUTED_DARK)
                         text_style: <FONT_REGULAR> { font_size: 10.0 }
                     }
-                    text: "Moxin Translator - Fully offline live translation, private by design"
+                    text: "Hen Local Translator - Fully offline live translation, private by design"
                 }
             }
 
@@ -498,7 +498,7 @@ impl TranslationOverlay {
 
     fn footer_brand_text(locale_en: bool) -> &'static str {
         if locale_en {
-            "Moxin Translator - Fully offline live translation, private by design"
+            "Hen Local Translator - Fully offline live translation, private by design"
         } else {
             "Moxin 实时翻译 - 完全离线本地部署，隐私优先"
         }

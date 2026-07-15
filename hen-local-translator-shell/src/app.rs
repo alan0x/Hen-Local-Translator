@@ -1,11 +1,11 @@
-//! Moxin Translator App - Main application
+//! Hen Local Translator App - Main application
 //!
 //! This shell hosts the translation control screen and the floating subtitle overlay.
 
+use hen_local_translator::HenLocalTranslatorApp;
+use hen_local_translator::TTSScreenWidgetRefExt;
 use makepad_widgets::event::WindowGeom;
 use makepad_widgets::*;
-use moxin_translator::MoxinTranslatorApp;
-use moxin_translator::TTSScreenWidgetRefExt;
 use moxin_widgets::translation_overlay::TranslationOverlay;
 use moxin_widgets::MoxinApp;
 use std::sync::OnceLock;
@@ -196,7 +196,7 @@ live_design! {
 
     // Import translation control screen. The type name is still TTSScreen during
     // the staged cleanup because the old screen module owns the live translation UI.
-    use moxin_translator::screen::TTSScreen;
+    use hen_local_translator::screen::TTSScreen;
 
     // Import translation overlay widget
     use moxin_widgets::translation_overlay::TranslationOverlay;
@@ -208,7 +208,7 @@ live_design! {
     App = {{App}} {
         ui: <Window> {
             window: {
-                title: "Moxin Translator"
+                title: "Hen Local Translator"
                 inner_size: vec2(1200, 800)
             }
             pass: { clear_color: (DARK_BG) }
@@ -227,7 +227,7 @@ live_design! {
         // the main screen. The window floats independently over any content.
         translation_ui: <Window> {
             window: {
-                title: "Moxin Translator - Translation"
+                title: "Hen Local Translator - Translation"
                 inner_size: vec2(600, 260)
                 position: vec2(100, 100)
             }
@@ -290,7 +290,7 @@ impl LiveRegister for App {
 
         // Register app widgets
         ::log::info!("Registering translation app widgets");
-        MoxinTranslatorApp::live_design(cx);
+        HenLocalTranslatorApp::live_design(cx);
 
         ::log::info!("LiveRegister::live_register completed");
     }
@@ -387,7 +387,7 @@ impl MatchEvent for App {
     }
 
     fn handle_startup(&mut self, cx: &mut Cx) {
-        ::log::info!("Moxin Translator application started");
+        ::log::info!("Hen Local Translator application started");
 
         // Inject a dock-icon reopen handler so that clicking the dock icon
         // always raises the main window — even when the translation overlay
@@ -422,7 +422,7 @@ impl MatchEvent for App {
             overlay.set_anchor_position_preset(cx, "50");
         }
 
-        ::log::info!("Moxin Translator initialization complete");
+        ::log::info!("Hen Local Translator initialization complete");
     }
 
     fn handle_timer(&mut self, cx: &mut Cx, event: &TimerEvent) {
@@ -616,7 +616,7 @@ impl MatchEvent for App {
     }
 
     fn handle_shutdown(&mut self, _cx: &mut Cx) {
-        ::log::info!("Moxin Translator application shutting down");
+        ::log::info!("Hen Local Translator application shutting down");
         self.ui.ttsscreen(ids!(body.tts_screen)).shutdown_cleanup();
     }
 }

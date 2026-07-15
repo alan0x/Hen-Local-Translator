@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DMG_PATH=""
-APP_NAME="Moxin Translator"
+APP_NAME="Hen Local Translator"
 CURRENT_APP=""
 WAIT_PID=""
 MOUNT_DIR=""
@@ -16,8 +16,8 @@ EOF
 }
 
 notify_failure() {
-  local message="Moxin Translator could not install the downloaded update automatically. The installer will be revealed in Finder."
-  /usr/bin/osascript -e "display dialog \"$message\" buttons {\"OK\"} default button \"OK\" with title \"Moxin Translator Update\"" >/dev/null 2>&1 || true
+  local message="Hen Local Translator could not install the downloaded update automatically. The installer will be revealed in Finder."
+  /usr/bin/osascript -e "display dialog \"$message\" buttons {\"OK\"} default button \"OK\" with title \"Hen Local Translator Update\"" >/dev/null 2>&1 || true
   if [[ -f "$DMG_PATH" ]]; then
     open -R "$DMG_PATH" >/dev/null 2>&1 || open "$DMG_PATH" >/dev/null 2>&1 || true
   fi

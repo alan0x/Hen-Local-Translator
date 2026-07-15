@@ -1,6 +1,6 @@
 //! # MoxinApp Trait - Plugin App Interface
 //!
-//! This module defines the standard interface for apps hosted by the Moxin Translator shell.
+//! This module defines the standard interface for apps hosted by the Hen Local Translator shell.
 //!
 //! ## Architecture
 //!
@@ -212,7 +212,7 @@ pub fn tab_clicked(actions: &[Action], tab_id: LiveId) -> bool {
         })
 }
 
-/// Trait for apps hosted by the Moxin Translator shell.
+/// Trait for apps hosted by the Hen Local Translator shell.
 ///
 /// # Example
 /// ```ignore

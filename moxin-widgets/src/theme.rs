@@ -1,6 +1,6 @@
 //! # Theme System
 //!
-//! Centralized color palette, fonts, and dark mode support for Moxin Translator.
+//! Centralized color palette, fonts, and dark mode support for Hen Local Translator.
 //!
 //! ## Usage
 //!
