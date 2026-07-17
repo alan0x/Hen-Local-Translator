@@ -7384,6 +7384,44 @@ live_design! {
                                                     values: ["1.0", "0.9", "0.85", "0.75", "0.65", "0.5", "0.35"]
                                                 }
                                                 }
+
+                                                setting_row_view_style = <View> {
+                                                width: 224, height: 68
+                                                flow: Down
+                                                spacing: 4
+
+                                                translation_view_style_label = <Label> {
+                                                    width: Fill, height: 22
+                                                    align: {y: 0.5}
+                                                    padding: {top: 0, bottom: 0}
+                                                    draw_text: {
+                                                        instance dark_mode: 0.0
+                                                        text_style: <FONT_MEDIUM>{ font_size: 10.0 }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
+                                                    }
+                                                    text: "Layout"
+                                                }
+
+                                                view_style_buttons = <ToolbarSegmentGroup> {
+                                                    width: Fill, height: 42
+
+                                                    view_style_split = <ToolbarSegmentBtn> {
+                                                        width: Fill, height: 36
+                                                        padding: {left: 8, right: 8}
+                                                        text: "Split"
+                                                        draw_bg: { active: 1.0 }
+                                                        draw_text: { active: 1.0 }
+                                                    }
+
+                                                    view_style_classic = <ToolbarSegmentBtn> {
+                                                        width: Fill, height: 36
+                                                        padding: {left: 8, right: 8}
+                                                        text: "Classic"
+                                                        draw_bg: { active: 0.0 }
+                                                        draw_text: { active: 0.0 }
+                                                    }
+                                                }
+                                                }
                                             }
                                         }
                                     }
@@ -10303,6 +10341,9 @@ pub struct TTSScreen {
     /// Whether the overlay is in fullscreen mode
     #[rust]
     translation_overlay_fullscreen: bool,
+    /// Subtitle layout: true = split dual-language panes, false = classic interleaved
+    #[rust(true)]
+    translation_subtitle_split: bool,
     /// Overlay window background opacity (0.0..1.0)
     #[rust]
     translation_overlay_opacity: f64,
@@ -10617,6 +10658,7 @@ impl Widget for TTSScreen {
             self.translation_audio_devices = Vec::new();
             self.translation_device_idx = 0; // 0 = System Audio, 1 = System Default Mic
             self.translation_overlay_fullscreen = true;
+            self.translation_subtitle_split = true;
             self.translation_overlay_opacity = 1.0;
             self.translation_overlay_font_size_preset = "24".to_string();
             self.translation_overlay_footer_font_size_preset =
@@ -11402,6 +11444,55 @@ impl Widget for TTSScreen {
             self.update_translation_overlay_style_buttons(cx);
             if let Some(shared) = self.translation_shared_state() {
                 shared.translation_overlay_fullscreen.set(true);
+            }
+        }
+
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_view_style
+                    .view_style_split
+            ))
+            .clicked(&actions)
+        {
+            self.translation_subtitle_split = true;
+            self.update_translation_view_style_buttons(cx);
+            if let Some(shared) = self.translation_shared_state() {
+                shared.translation_subtitle_split.set(true);
+            }
+        }
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_view_style
+                    .view_style_classic
+            ))
+            .clicked(&actions)
+        {
+            self.translation_subtitle_split = false;
+            self.update_translation_view_style_buttons(cx);
+            if let Some(shared) = self.translation_shared_state() {
+                shared.translation_subtitle_split.set(false);
             }
         }
 
@@ -16988,7 +17079,7 @@ impl TTSScreen {
     }
 
     fn translation_brand_title(&self) -> &'static str {
-        self.tr("Hen Local 实时翻译", "Hen Local Translator")
+        self.tr("很Local 实时翻译", "Hen Local Translator")
     }
 
     fn translation_brand_tagline(&self) -> &'static str {
@@ -17442,6 +17533,54 @@ impl TTSScreen {
                     .settings_card
                     .route_column
                     .subtitle_options_row
+                    .setting_row_view_style
+                    .translation_view_style_label
+            ))
+            .set_text(cx, self.tr("内容样式", "Layout"));
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_view_style
+                    .view_style_split
+            ))
+            .set_text(cx, self.tr("分栏", "Split"));
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_view_style
+                    .view_style_classic
+            ))
+            .set_text(cx, self.tr("对照", "Classic"));
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
                     .setting_row_opacity
                     .translation_opacity_label
             ))
@@ -17585,7 +17724,7 @@ impl TTSScreen {
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.translation_permission_hint.translation_permission_hint_label
             ))
             .set_text(cx, self.tr(
-                "屏幕录制权限未授权。请前往系统设置 → 隐私与安全性 → 屏幕录制，启用 Hen Local 实时翻译，然后重启应用。",
+                "屏幕录制权限未授权。请前往系统设置 → 隐私与安全性 → 屏幕录制，启用 很Local 实时翻译，然后重启应用。",
                 "Screen recording permission not granted. Go to System Settings → Privacy & Security → Screen Recording, enable Hen Local Translator, then restart the app.",
             ));
         self.update_translation_settings_layout_for_locale(cx);
@@ -23060,6 +23199,53 @@ impl TTSScreen {
     }
 
     /// Update the active state of the floating/full-window subtitle style buttons.
+    fn update_translation_view_style_buttons(&mut self, cx: &mut Cx) {
+        let split = if self.translation_subtitle_split {
+            1.0_f64
+        } else {
+            0.0
+        };
+        let classic = 1.0 - split;
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_view_style
+                    .view_style_split
+            ))
+            .apply_over(
+                cx,
+                live! { draw_bg: { active: (split) } draw_text: { active: (split) } },
+            );
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_view_style
+                    .view_style_classic
+            ))
+            .apply_over(
+                cx,
+                live! { draw_bg: { active: (classic) } draw_text: { active: (classic) } },
+            );
+    }
+
     fn update_translation_overlay_style_buttons(&mut self, cx: &mut Cx) {
         let full = if self.translation_overlay_fullscreen {
             1.0_f64
@@ -24347,6 +24533,9 @@ impl TTSScreen {
             shared
                 .translation_overlay_fullscreen
                 .set(self.translation_overlay_fullscreen);
+            shared
+                .translation_subtitle_split
+                .set(self.translation_subtitle_split);
             shared
                 .translation_overlay_opacity
                 .set(self.translation_overlay_opacity);

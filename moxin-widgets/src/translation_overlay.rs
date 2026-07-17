@@ -58,6 +58,49 @@ live_design! {
         }
     }
 
+    // Clipped caption pane scroller. The scroll bar must stay logically enabled
+    // (set_scroll_pos is a no-op when show_scroll_y is false) but is drawn
+    // fully transparent — scrolling is driven by the smooth-scroll animation.
+    CaptionScroll = <ScrollYView> {
+        width: Fill, height: Fill
+        flow: Down
+        scroll_bars: <ScrollBars> {
+            show_scroll_x: false
+            show_scroll_y: true
+            scroll_bar_y: {
+                draw_bg: {
+                    fn pixel(self) -> vec4 {
+                        return vec4(0.0, 0.0, 0.0, 0.0);
+                    }
+                }
+            }
+        }
+    }
+
+    // Small language tag shown at the top of each caption pane.
+    LangChip = <RoundedView> {
+        width: Fit, height: Fit
+        padding: { left: 10, right: 10, top: 3, bottom: 3 }
+        draw_bg: {
+            instance border_radius: 9.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
+                sdf.fill(vec4(1.0, 1.0, 1.0, 0.08));
+                sdf.stroke(vec4(1.0, 1.0, 1.0, 0.14), 1.0);
+                return sdf.result;
+            }
+        }
+        chip_label = <Label> {
+            width: Fit, height: Fit
+            draw_text: {
+                color: vec4(0.72, 0.76, 0.82, 1.0)
+                text_style: <FONT_REGULAR> { font_size: 11.0 }
+            }
+            text: "EN"
+        }
+    }
+
     pub TranslationOverlay = {{TranslationOverlay}} {
         width: Fill, height: Fill
         flow: Down
@@ -70,10 +113,76 @@ live_design! {
             }
         }
 
-        // ── Scrolling sentence list ──────────────────────────────────────────
+        // ── Dual-language caption view (default) ────────────────────────────
+        // Two separated language panes like a conference caption screen:
+        // translation on top, source below, each smooth-scrolling as text grows.
+        split_view = <View> {
+            visible: true
+            width: Fill, height: Fill
+            flow: Down
+            padding: { left: 22, right: 22, top: 14, bottom: 6 }
+
+            translation_pane = <View> {
+                width: Fill, height: Fill
+                flow: Down
+                spacing: 8
+
+                translation_chip = <LangChip> {}
+
+                translation_scroll = <CaptionScroll> {
+                    translation_text = <Label> {
+                        width: Fill, height: Fit
+                        padding: 0.0
+                        draw_text: {
+                            color: (WHITE)
+                            text_style: <FONT_REGULAR> { font_size: 24.0, line_spacing: 1.35 }
+                            wrap: Word
+                        }
+                        text: ""
+                    }
+                }
+            }
+
+            split_divider = <View> {
+                width: Fill, height: 1
+                margin: { top: 12, bottom: 12 }
+                show_bg: true
+                draw_bg: {
+                    fn pixel(self) -> vec4 {
+                        // Hairline that fades out toward both edges.
+                        let fade = sin(3.14159 * self.pos.x);
+                        return vec4(1.0, 1.0, 1.0, 0.18 * fade);
+                    }
+                }
+            }
+
+            source_pane = <View> {
+                width: Fill, height: Fill
+                flow: Down
+                spacing: 8
+
+                source_chip = <LangChip> {}
+
+                source_scroll = <CaptionScroll> {
+                    source_text_label = <Label> {
+                        width: Fill, height: Fit
+                        padding: 0.0
+                        draw_text: {
+                            color: vec4(0.80, 0.84, 0.90, 1.0)
+                            text_style: <FONT_REGULAR> { font_size: 23.0, line_spacing: 1.35 }
+                            wrap: Word
+                        }
+                        text: ""
+                    }
+                }
+            }
+        }
+
+        // ── Classic interleaved sentence list (kept as fallback) ─────────────
         // bottom_spacer height is set dynamically in set_viewport_height() so the
         // last sentence anchors at ~50% of the viewport regardless of window size.
         content_scroll = <ScrollYView> {
+            visible: false
             width: Fill, height: Fill
             flow: Down
             align: { x: 0.0, y: 0.0 }
@@ -382,10 +491,43 @@ pub struct TranslationOverlay {
 
     #[rust]
     status: String,
+
+    /// Dual-language split caption view (translation pane + source pane).
+    #[rust(true)]
+    split_mode: bool,
+
+    /// Language codes from the active pair, for the pane chips.
+    #[rust]
+    source_lang_code: String,
+    #[rust]
+    target_lang_code: String,
+
+    /// Smooth-scroll state per pane: current animated offset and target.
+    #[rust]
+    trans_scroll_cur: f64,
+    #[rust]
+    trans_scroll_target: f64,
+    #[rust]
+    src_scroll_cur: f64,
+    #[rust]
+    src_scroll_target: f64,
+
+    /// Frame driver for the smooth-scroll animation.
+    #[rust]
+    anim_frame: NextFrame,
+
+    /// Cached split-view texts to avoid redundant relayouts.
+    #[rust]
+    last_split_translation: String,
+    #[rust]
+    last_split_source: String,
 }
 
 impl Widget for TranslationOverlay {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event, scope: &mut Scope) {
+        if self.anim_frame.is_event(event).is_some() {
+            self.step_smooth_scroll(cx);
+        }
         self.view.handle_event(cx, event, scope);
     }
 
@@ -403,6 +545,12 @@ impl Widget for TranslationOverlay {
         // f64::MAX clamps to the correct new maximum scroll position.
 
         let result = self.view.draw_walk(cx, scope, walk);
+
+        if self.split_mode {
+            // Measure fresh layout and retarget the smooth-scroll animation.
+            self.update_split_scroll_targets(cx);
+            return result;
+        }
 
         // Keep last sentence vertically centered while compensating for dynamic
         // pending label height (wrap differs between compact/fullscreen widths).
@@ -437,6 +585,167 @@ impl TranslationOverlay {
     const PENDING_MARGIN_TOP: f64 = 8.0;
     const PENDING_MARGIN_BOTTOM: f64 = 8.0;
     const TAIL_SAFE_GAP: f64 = 10.0;
+
+    /// Per-frame easing factor for smooth caption scrolling (0..1).
+    const SMOOTH_SCROLL_EASE: f64 = 0.16;
+    /// Snap threshold: below this distance the animation lands on target.
+    const SMOOTH_SCROLL_SNAP: f64 = 0.5;
+    /// Keep this many recent sentences per pane.
+    const SPLIT_KEEP_SENTENCES: usize = 16;
+
+    fn lang_display(code: &str) -> &'static str {
+        match code {
+            "zh" => "中文",
+            "en" => "EN",
+            "ja" => "日本語",
+            "ko" => "한국어",
+            "fr" => "FR",
+            "de" => "DE",
+            "es" => "ES",
+            "ru" => "RU",
+            _ => "•",
+        }
+    }
+
+    /// Join sentences one-per-line so each committed sentence reads as its own
+    /// caption row instead of one dense run-on paragraph.
+    fn join_sentences<'a>(parts: impl Iterator<Item = &'a str>) -> String {
+        let mut out = String::new();
+        for part in parts {
+            let part = part.trim();
+            if part.is_empty() {
+                continue;
+            }
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(part);
+        }
+        out
+    }
+
+    /// Build the continuous (translation, source) texts for the split panes.
+    fn build_split_texts(
+        history: &[(String, String)],
+        pending: &str,
+        passthrough: bool,
+    ) -> (String, String) {
+        let start = history.len().saturating_sub(Self::SPLIT_KEEP_SENTENCES);
+        let recent = &history[start..];
+        if passthrough {
+            // Single language: everything flows into the primary pane.
+            let text = Self::join_sentences(
+                recent
+                    .iter()
+                    .map(|(source, _)| source.as_str())
+                    .chain(std::iter::once(pending)),
+            );
+            return (text, String::new());
+        }
+        let translation = Self::join_sentences(
+            recent
+                .iter()
+                .map(|(_, translation)| translation.as_str()),
+        );
+        let source = Self::join_sentences(
+            recent
+                .iter()
+                .map(|(source, _)| source.as_str())
+                .chain(std::iter::once(pending)),
+        );
+        (translation, source)
+    }
+
+    /// Apply new split-view texts and chip labels, and kick the scroll animation.
+    fn apply_split_update(&mut self, cx: &mut Cx, translation: String, source: String) {
+        if translation == self.last_split_translation && source == self.last_split_source {
+            return;
+        }
+        self.last_split_translation = translation.clone();
+        self.last_split_source = source.clone();
+        self.view
+            .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+            .set_text(cx, &translation);
+        self.view
+            .label(ids!(split_view.source_pane.source_scroll.source_text_label))
+            .set_text(cx, &source);
+        self.view.redraw(cx);
+    }
+
+    fn update_split_chips(&mut self, cx: &mut Cx) {
+        let (top_code, show_source) = if self.passthrough {
+            (self.source_lang_code.as_str(), false)
+        } else {
+            (self.target_lang_code.as_str(), true)
+        };
+        self.view
+            .label(ids!(split_view.translation_pane.translation_chip.chip_label))
+            .set_text(cx, Self::lang_display(top_code));
+        self.view
+            .label(ids!(split_view.source_pane.source_chip.chip_label))
+            .set_text(cx, Self::lang_display(&self.source_lang_code));
+        self.view
+            .view(ids!(split_view.source_pane))
+            .set_visible(cx, show_source);
+        self.view
+            .view(ids!(split_view.split_divider))
+            .set_visible(cx, show_source);
+    }
+
+    /// Measure pane layouts after a draw pass and update scroll targets. Runs
+    /// inside draw_walk, so all areas reflect the freshly laid-out content.
+    fn update_split_scroll_targets(&mut self, cx: &mut Cx2d) {
+        let measure = |view: ViewRef, label: LabelRef| -> f64 {
+            let viewport_h = view.area().rect(cx).size.y.max(0.0);
+            let content_h = label.area().rect(cx).size.y.max(0.0);
+            (content_h + Self::TAIL_SAFE_GAP - viewport_h).max(0.0)
+        };
+        let trans_target = measure(
+            self.view
+                .view(ids!(split_view.translation_pane.translation_scroll)),
+            self.view
+                .label(ids!(split_view.translation_pane.translation_scroll.translation_text)),
+        );
+        let src_target = measure(
+            self.view.view(ids!(split_view.source_pane.source_scroll)),
+            self.view
+                .label(ids!(split_view.source_pane.source_scroll.source_text_label)),
+        );
+        self.trans_scroll_target = trans_target;
+        self.src_scroll_target = src_target;
+        if (self.trans_scroll_target - self.trans_scroll_cur).abs() > Self::SMOOTH_SCROLL_SNAP
+            || (self.src_scroll_target - self.src_scroll_cur).abs() > Self::SMOOTH_SCROLL_SNAP
+        {
+            self.anim_frame = cx.new_next_frame();
+        }
+    }
+
+    /// One animation frame: ease each pane's offset toward its target.
+    fn step_smooth_scroll(&mut self, cx: &mut Cx) {
+        let mut animating = false;
+        for (cur, target) in [
+            (&mut self.trans_scroll_cur, self.trans_scroll_target),
+            (&mut self.src_scroll_cur, self.src_scroll_target),
+        ] {
+            let delta = target - *cur;
+            if delta.abs() > Self::SMOOTH_SCROLL_SNAP {
+                *cur += delta * Self::SMOOTH_SCROLL_EASE;
+                animating = true;
+            } else {
+                *cur = target;
+            }
+        }
+        self.view
+            .view(ids!(split_view.translation_pane.translation_scroll))
+            .set_scroll_pos(cx, dvec2(0.0, self.trans_scroll_cur));
+        self.view
+            .view(ids!(split_view.source_pane.source_scroll))
+            .set_scroll_pos(cx, dvec2(0.0, self.src_scroll_cur));
+        if animating {
+            self.anim_frame = cx.new_next_frame();
+        }
+        self.view.redraw(cx);
+    }
 
     const FONT_SIZE_PRESETS: &'static [&'static str] = &[
         "16", "20", "24", "30", "36", "44", "52", "64", "80", "96", "120", "160",
@@ -480,6 +789,18 @@ impl TranslationOverlay {
                 cx,
                 live! { draw_text: { text_style: { font_size: (pending_size) } } },
             );
+        self.view
+            .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+            .apply_over(
+                cx,
+                live! { draw_text: { text_style: { font_size: (history_size) } } },
+            );
+        self.view
+            .label(ids!(split_view.source_pane.source_scroll.source_text_label))
+            .apply_over(
+                cx,
+                live! { draw_text: { text_style: { font_size: (pending_size) } } },
+            );
     }
 
     fn update_footer_font_size_draw_styles(&self, cx: &mut Cx) {
@@ -500,7 +821,7 @@ impl TranslationOverlay {
         if locale_en {
             "Hen Local Translator - Fully offline live translation, private by design"
         } else {
-            "Moxin 实时翻译 - 完全离线本地部署，隐私优先"
+            "很Local 实时翻译 - 完全离线本地部署，隐私优先"
         }
     }
 
@@ -519,6 +840,19 @@ impl TranslationOverlay {
 
     fn show_idle_placeholder_if_empty(&mut self, cx: &mut Cx) {
         if self.has_runtime_content() {
+            return;
+        }
+        if self.split_mode {
+            self.idle_placeholder_visible = true;
+            self.last_split_translation.clear();
+            self.last_split_source.clear();
+            self.view
+                .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+                .set_text(cx, Self::idle_placeholder_text(&self.placeholder_lang));
+            self.view
+                .label(ids!(split_view.source_pane.source_scroll.source_text_label))
+                .set_text(cx, "");
+            self.view.redraw(cx);
             return;
         }
         self.idle_placeholder_visible = true;
@@ -718,9 +1052,38 @@ impl TranslationOverlay {
         self.passthrough = passthrough;
     }
 
+    /// Switch between the split dual-language view and the classic interleaved list.
+    pub fn set_split_view(&mut self, cx: &mut Cx, split: bool) {
+        if self.split_mode == split {
+            return;
+        }
+        self.split_mode = split;
+        self.view.view(ids!(split_view)).set_visible(cx, split);
+        self.view.view(ids!(content_scroll)).set_visible(cx, !split);
+        // Force the newly shown view to rebuild from the next update.
+        self.last_split_translation.clear();
+        self.last_split_source.clear();
+        self.last_history_len = 0;
+        self.last_pending_text.clear();
+        self.last_spacer_height = -1.0;
+        self.trans_scroll_cur = 0.0;
+        self.trans_scroll_target = 0.0;
+        self.src_scroll_cur = 0.0;
+        self.src_scroll_target = 0.0;
+        self.pending_scroll = true;
+        if !self.has_runtime_content() {
+            self.idle_placeholder_visible = false;
+            self.show_idle_placeholder_if_empty(cx);
+        }
+        self.view.redraw(cx);
+    }
+
     pub fn set_language_pair(&mut self, cx: &mut Cx, source_lang: &str, target_lang: &str) {
         let passthrough = target_lang.eq_ignore_ascii_case("none");
         self.passthrough = passthrough;
+        self.source_lang_code = source_lang.to_string();
+        self.target_lang_code = target_lang.to_string();
+        self.update_split_chips(cx);
         let placeholder_lang = if passthrough {
             source_lang
         } else {
@@ -756,6 +1119,12 @@ impl TranslationOverlay {
         pending: &str,
     ) {
         self.idle_placeholder_visible = false;
+        if self.split_mode {
+            let (translation, source) =
+                Self::build_split_texts(history, pending.trim(), self.passthrough);
+            self.apply_split_update(cx, translation, source);
+            return;
+        }
         let history_segments = Self::format_history_segments(history, self.passthrough);
         self.view
             .translation_history(ids!(content_scroll.history_flow))
@@ -826,6 +1195,24 @@ impl TranslationOverlay {
         self.pending_only_mode = false;
         self.pending_scroll = false;
         self.last_spacer_height = 0.0;
+        self.last_split_translation.clear();
+        self.last_split_source.clear();
+        self.trans_scroll_cur = 0.0;
+        self.trans_scroll_target = 0.0;
+        self.src_scroll_cur = 0.0;
+        self.src_scroll_target = 0.0;
+        self.view
+            .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+            .set_text(cx, "");
+        self.view
+            .label(ids!(split_view.source_pane.source_scroll.source_text_label))
+            .set_text(cx, "");
+        self.view
+            .view(ids!(split_view.translation_pane.translation_scroll))
+            .set_scroll_pos(cx, dvec2(0.0, 0.0));
+        self.view
+            .view(ids!(split_view.source_pane.source_scroll))
+            .set_scroll_pos(cx, dvec2(0.0, 0.0));
         self.view
             .translation_history(ids!(content_scroll.history_flow))
             .set_segments(cx, Vec::new());
@@ -1014,6 +1401,12 @@ impl TranslationOverlayRef {
     pub fn set_passthrough(&self, cx: &mut Cx, passthrough: bool) {
         if let Some(mut inner) = self.borrow_mut() {
             inner.set_passthrough(cx, passthrough);
+        }
+    }
+
+    pub fn set_split_view(&self, cx: &mut Cx, split: bool) {
+        if let Some(mut inner) = self.borrow_mut() {
+            inner.set_split_view(cx, split);
         }
     }
 

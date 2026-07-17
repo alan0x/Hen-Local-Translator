@@ -569,6 +569,13 @@ impl MatchEvent for App {
             };
         }
 
+        if let Some(split) = dora_state.translation_subtitle_split.read_if_dirty() {
+            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
+            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
+                overlay.set_split_view(cx, split);
+            };
+        }
+
         // ── Translation overlay status heartbeat (idle/warming/listening) ─────
         if self.translation_overlay_visible {
             let active = dora_state.translation_overlay_active.read();

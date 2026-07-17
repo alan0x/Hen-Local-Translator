@@ -693,6 +693,9 @@ pub struct SharedDoraState {
     /// Current translation overlay anchor position preset percentage.
     pub translation_anchor_position_preset: DirtyValue<String>,
 
+    /// Subtitle layout: true = split dual-language panes, false = classic interleaved.
+    pub translation_subtitle_split: DirtyValue<bool>,
+
     /// Selected audio source for translation input (mic or system audio).
     pub translation_audio_source: DirtyValue<AudioSource>,
 
@@ -731,6 +734,7 @@ impl SharedDoraState {
                     translation_font_size_preset: DirtyValue::new("24".to_string()),
                     translation_footer_font_size_preset: DirtyValue::new("20".to_string()),
                     translation_anchor_position_preset: DirtyValue::new("50".to_string()),
+                    translation_subtitle_split: DirtyValue::new(true),
                     translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
                     translation_overlay_status: DirtyValue::new("warming".to_string()),
                     translation_overlay_active: DirtyValue::new(false),
@@ -758,6 +762,7 @@ impl SharedDoraState {
             translation_font_size_preset: DirtyValue::new("24".to_string()),
             translation_footer_font_size_preset: DirtyValue::new("20".to_string()),
             translation_anchor_position_preset: DirtyValue::new("50".to_string()),
+            translation_subtitle_split: DirtyValue::new(true),
             translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
             translation_overlay_status: DirtyValue::new("warming".to_string()),
             translation_overlay_active: DirtyValue::new(false),
@@ -820,6 +825,7 @@ impl Default for SharedDoraState {
             translation_font_size_preset: DirtyValue::new("24".to_string()),
             translation_footer_font_size_preset: DirtyValue::new("20".to_string()),
             translation_anchor_position_preset: DirtyValue::new("50".to_string()),
+            translation_subtitle_split: DirtyValue::new(true),
             translation_audio_source: DirtyValue::new(AudioSource::SystemAudio),
             translation_overlay_status: DirtyValue::new("warming".to_string()),
             translation_overlay_active: DirtyValue::new(false),
