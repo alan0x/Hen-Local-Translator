@@ -4,35 +4,32 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-makepad-widgets.workspace = true
-moxin-widgets = { path = "../moxin-widgets" }
-moxin-ui = { path = "../moxin-ui" }
+tauri = { version = "2", features = ["tray-icon"] }
 moxin-dora-bridge = { path = "../moxin-dora-bridge" }
-hen-local-translator = { path = "../apps/hen-local-translator" }
 
-# Audio
+# Audio device discovery
 cpal.workspace = true
 
-# Async runtime
+# Runtime and channels
 tokio.workspace = true
-
-# Utilities
+crossbeam-channel.workspace = true
 parking_lot.workspace = true
+
+# Serialization and utilities
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 env_logger.workspace = true
 dirs.workspace = true
-sysinfo.workspace = true
-ctrlc = "3.4"
-
-# CLI
+anyhow.workspace = true
 clap = { version = "4.4", features = ["derive"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-makepad-objc-sys = { git = "https://github.com/wyeworks/makepad", rev = "53b2e5c84" }
+objc2 = "0.6"
 
 [[bin]]
 name = "hen-local-translator"

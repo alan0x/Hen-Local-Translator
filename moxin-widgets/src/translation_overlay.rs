@@ -42,6 +42,8 @@ live_design! {
     use link::widgets::*;
 
     use crate::theme::FONT_REGULAR;
+    use crate::theme::FONT_MEDIUM;
+    use crate::theme::FONT_SEMIBOLD;
     use crate::theme::WHITE;
     use crate::theme::MOXIN_BG_PRIMARY_DARK;
     use crate::theme::MOXIN_TEXT_MUTED_DARK;
@@ -77,30 +79,6 @@ live_design! {
         }
     }
 
-    // Small language tag shown at the top of each caption pane.
-    LangChip = <RoundedView> {
-        width: Fit, height: Fit
-        padding: { left: 10, right: 10, top: 3, bottom: 3 }
-        draw_bg: {
-            instance border_radius: 9.0
-            fn pixel(self) -> vec4 {
-                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                sdf.fill(vec4(1.0, 1.0, 1.0, 0.08));
-                sdf.stroke(vec4(1.0, 1.0, 1.0, 0.14), 1.0);
-                return sdf.result;
-            }
-        }
-        chip_label = <Label> {
-            width: Fit, height: Fit
-            draw_text: {
-                color: vec4(0.72, 0.76, 0.82, 1.0)
-                text_style: <FONT_REGULAR> { font_size: 11.0 }
-            }
-            text: "EN"
-        }
-    }
-
     pub TranslationOverlay = {{TranslationOverlay}} {
         width: Fill, height: Fill
         flow: Down
@@ -108,34 +86,31 @@ live_design! {
         draw_bg: {
             instance bg_opacity: 1.0
             fn pixel(self) -> vec4 {
-                let base = (MOXIN_BG_PRIMARY_DARK);
+                let base = vec4(0.025, 0.03, 0.04, 1.0);
                 return vec4(base.x, base.y, base.z, self.bg_opacity);
             }
         }
 
         // ── Dual-language caption view (default) ────────────────────────────
-        // Two separated language panes like a conference caption screen:
-        // translation on top, source below, each smooth-scrolling as text grows.
+        // Source-first Swiss caption layout with a strict typographic hierarchy.
         split_view = <View> {
             visible: true
             width: Fill, height: Fill
             flow: Down
-            padding: { left: 22, right: 22, top: 14, bottom: 6 }
+            padding: { left: 28, right: 28, top: 22, bottom: 10 }
 
-            translation_pane = <View> {
+            source_pane = <View> {
                 width: Fill, height: Fill
                 flow: Down
-                spacing: 8
+                spacing: 0
 
-                translation_chip = <LangChip> {}
-
-                translation_scroll = <CaptionScroll> {
-                    translation_text = <Label> {
+                source_scroll = <CaptionScroll> {
+                    source_text_label = <Label> {
                         width: Fill, height: Fit
                         padding: 0.0
                         draw_text: {
                             color: (WHITE)
-                            text_style: <FONT_REGULAR> { font_size: 24.0, line_spacing: 1.35 }
+                            text_style: <FONT_SEMIBOLD> { font_size: 27.0, line_spacing: 1.30 }
                             wrap: Word
                         }
                         text: ""
@@ -145,31 +120,27 @@ live_design! {
 
             split_divider = <View> {
                 width: Fill, height: 1
-                margin: { top: 12, bottom: 12 }
+                margin: { top: 14, bottom: 14 }
                 show_bg: true
                 draw_bg: {
                     fn pixel(self) -> vec4 {
-                        // Hairline that fades out toward both edges.
-                        let fade = sin(3.14159 * self.pos.x);
-                        return vec4(1.0, 1.0, 1.0, 0.18 * fade);
+                        return vec4(1.0, 1.0, 1.0, 0.32);
                     }
                 }
             }
 
-            source_pane = <View> {
+            translation_pane = <View> {
                 width: Fill, height: Fill
                 flow: Down
-                spacing: 8
+                spacing: 0
 
-                source_chip = <LangChip> {}
-
-                source_scroll = <CaptionScroll> {
-                    source_text_label = <Label> {
+                translation_scroll = <CaptionScroll> {
+                    translation_text = <Label> {
                         width: Fill, height: Fit
                         padding: 0.0
                         draw_text: {
-                            color: vec4(0.80, 0.84, 0.90, 1.0)
-                            text_style: <FONT_REGULAR> { font_size: 23.0, line_spacing: 1.35 }
+                            color: vec4(0.78, 0.80, 0.84, 1.0)
+                            text_style: <FONT_MEDIUM> { font_size: 23.0, line_spacing: 1.35 }
                             wrap: Word
                         }
                         text: ""
@@ -214,22 +185,31 @@ live_design! {
 
         // ── Bottom branding footer ────────────────────────────────────────────
         overlay_footer = <View> {
-            width: Fill, height: Fit
+            width: Fill, height: 40
             flow: Right
-            align: {x: 0.5, y: 0.5}
-            spacing: 5
-            padding: {left: 10, right: 10, top: 4, bottom: 4}
+            align: {y: 0.5}
+            spacing: 8
+            padding: {left: 28, right: 28, top: 6, bottom: 6}
+            show_bg: true
+            draw_bg: {
+                fn pixel(self) -> vec4 {
+                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                    sdf.rect(0., 0., self.rect_size.x, 1.0);
+                    sdf.fill(vec4(1.0, 1.0, 1.0, 0.32));
+                    return sdf.result;
+                }
+            }
 
-            footer_left_spacer = <View> { width: 58, height: 1 }
+            footer_left_spacer = <View> { width: 0, height: 0 }
 
             footer_brand = <View> {
                 width: Fill, height: Fit
                 flow: Right
-                align: {x: 0.5, y: 0.5}
-                spacing: 5
+                align: {x: 0.0, y: 0.5}
+                spacing: 0
 
                 footer_logo = <Image> {
-                    width: 22, height: 22
+                    width: 0, height: 0
                     source: dep("crate://self/resources/hen_local_icon.png")
                     fit: Smallest
                 }
@@ -237,18 +217,27 @@ live_design! {
                 footer_label = <Label> {
                     width: Fit
                     draw_text: {
-                        color: (MOXIN_TEXT_MUTED_DARK)
-                        text_style: <FONT_REGULAR> { font_size: 10.0 }
+                        color: vec4(0.74, 0.76, 0.80, 1.0)
+                        text_style: <FONT_MEDIUM> { font_size: 10.0 }
                     }
-                    text: "Hen Local Translator - Fully offline live translation, private by design"
+                    text: "HEN LOCAL / LIVE TRANSLATION"
                 }
             }
 
             footer_controls = <View> {
-                width: 58, height: Fit
+                width: Fit, height: Fit
                 flow: Right
                 align: {x: 1.0, y: 0.5}
                 spacing: 8
+
+                footer_privacy_label = <Label> {
+                    width: Fit, height: Fit
+                    draw_text: {
+                        color: vec4(0.74, 0.76, 0.80, 1.0)
+                        text_style: <FONT_MEDIUM> { font_size: 10.0 }
+                    }
+                    text: "LOCAL • PRIVATE"
+                }
 
                 overlay_stop_btn = <Button> {
                     width: 22, height: 22
@@ -275,13 +264,13 @@ live_design! {
                 }
 
                 overlay_status_dot = <View> {
-                    width: 12, height: 12
+                    width: 8, height: 8
                     show_bg: true
                     draw_bg: {
-                        instance dot_color: vec4(0.451, 0.463, 0.478, 1.0)
+                        instance dot_color: vec4(0.90, 0.08, 0.10, 1.0)
                         fn pixel(self) -> vec4 {
                             let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                            sdf.circle(self.rect_size.x * 0.5, self.rect_size.y * 0.5, 5.5);
+                            sdf.rect(1.0, 1.0, self.rect_size.x - 2.0, self.rect_size.y - 2.0);
                             sdf.fill(self.dot_color);
                             return sdf.result;
                         }
@@ -593,20 +582,6 @@ impl TranslationOverlay {
     /// Keep this many recent sentences per pane.
     const SPLIT_KEEP_SENTENCES: usize = 16;
 
-    fn lang_display(code: &str) -> &'static str {
-        match code {
-            "zh" => "中文",
-            "en" => "EN",
-            "ja" => "日本語",
-            "ko" => "한국어",
-            "fr" => "FR",
-            "de" => "DE",
-            "es" => "ES",
-            "ru" => "RU",
-            _ => "•",
-        }
-    }
-
     /// Join sentences one-per-line so each committed sentence reads as its own
     /// caption row instead of one dense run-on paragraph.
     fn join_sentences<'a>(parts: impl Iterator<Item = &'a str>) -> String {
@@ -642,11 +617,8 @@ impl TranslationOverlay {
             );
             return (text, String::new());
         }
-        let translation = Self::join_sentences(
-            recent
-                .iter()
-                .map(|(_, translation)| translation.as_str()),
-        );
+        let translation =
+            Self::join_sentences(recent.iter().map(|(_, translation)| translation.as_str()));
         let source = Self::join_sentences(
             recent
                 .iter()
@@ -656,7 +628,7 @@ impl TranslationOverlay {
         (translation, source)
     }
 
-    /// Apply new split-view texts and chip labels, and kick the scroll animation.
+    /// Apply new split-view texts and kick the scroll animation.
     fn apply_split_update(&mut self, cx: &mut Cx, translation: String, source: String) {
         if translation == self.last_split_translation && source == self.last_split_source {
             return;
@@ -664,7 +636,12 @@ impl TranslationOverlay {
         self.last_split_translation = translation.clone();
         self.last_split_source = source.clone();
         self.view
-            .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+            .label(ids!(
+                split_view
+                    .translation_pane
+                    .translation_scroll
+                    .translation_text
+            ))
             .set_text(cx, &translation);
         self.view
             .label(ids!(split_view.source_pane.source_scroll.source_text_label))
@@ -672,18 +649,8 @@ impl TranslationOverlay {
         self.view.redraw(cx);
     }
 
-    fn update_split_chips(&mut self, cx: &mut Cx) {
-        let (top_code, show_source) = if self.passthrough {
-            (self.source_lang_code.as_str(), false)
-        } else {
-            (self.target_lang_code.as_str(), true)
-        };
-        self.view
-            .label(ids!(split_view.translation_pane.translation_chip.chip_label))
-            .set_text(cx, Self::lang_display(top_code));
-        self.view
-            .label(ids!(split_view.source_pane.source_chip.chip_label))
-            .set_text(cx, Self::lang_display(&self.source_lang_code));
+    fn update_split_layout(&mut self, cx: &mut Cx) {
+        let show_source = !self.passthrough;
         self.view
             .view(ids!(split_view.source_pane))
             .set_visible(cx, show_source);
@@ -703,8 +670,12 @@ impl TranslationOverlay {
         let trans_target = measure(
             self.view
                 .view(ids!(split_view.translation_pane.translation_scroll)),
-            self.view
-                .label(ids!(split_view.translation_pane.translation_scroll.translation_text)),
+            self.view.label(ids!(
+                split_view
+                    .translation_pane
+                    .translation_scroll
+                    .translation_text
+            )),
         );
         let src_target = measure(
             self.view.view(ids!(split_view.source_pane.source_scroll)),
@@ -761,11 +732,7 @@ impl TranslationOverlay {
     }
 
     fn footer_font_size_value(preset: &str) -> f64 {
-        preset.parse().unwrap_or(20.0)
-    }
-
-    fn footer_logo_size_value(preset: &str) -> f64 {
-        Self::footer_font_size_value(preset).max(22.0)
+        (preset.parse::<f64>().unwrap_or(20.0) * 0.5).clamp(9.0, 14.0)
     }
 
     fn anchor_position_ratio(preset: &str) -> f64 {
@@ -790,22 +757,27 @@ impl TranslationOverlay {
                 live! { draw_text: { text_style: { font_size: (pending_size) } } },
             );
         self.view
-            .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+            .label(ids!(
+                split_view
+                    .translation_pane
+                    .translation_scroll
+                    .translation_text
+            ))
             .apply_over(
                 cx,
-                live! { draw_text: { text_style: { font_size: (history_size) } } },
+                live! { draw_text: { text_style: { font_size: (pending_size) } } },
             );
         self.view
             .label(ids!(split_view.source_pane.source_scroll.source_text_label))
             .apply_over(
                 cx,
-                live! { draw_text: { text_style: { font_size: (pending_size) } } },
+                live! { draw_text: { text_style: { font_size: (history_size) } } },
             );
     }
 
     fn update_footer_font_size_draw_styles(&self, cx: &mut Cx) {
         let size = Self::footer_font_size_value(&self.footer_font_size_preset);
-        let logo_size = Self::footer_logo_size_value(&self.footer_font_size_preset);
+        let logo_size = 0.0;
         self.view
             .label(ids!(overlay_footer.footer_brand.footer_label))
             .apply_over(
@@ -819,9 +791,9 @@ impl TranslationOverlay {
 
     fn footer_brand_text(locale_en: bool) -> &'static str {
         if locale_en {
-            "Hen Local Translator - Fully offline live translation, private by design"
+            "HEN LOCAL / LIVE TRANSLATION"
         } else {
-            "很Local 实时翻译 - 完全离线本地部署，隐私优先"
+            "很LOCAL / 实时翻译"
         }
     }
 
@@ -847,7 +819,12 @@ impl TranslationOverlay {
             self.last_split_translation.clear();
             self.last_split_source.clear();
             self.view
-                .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+                .label(ids!(
+                    split_view
+                        .translation_pane
+                        .translation_scroll
+                        .translation_text
+                ))
                 .set_text(cx, Self::idle_placeholder_text(&self.placeholder_lang));
             self.view
                 .label(ids!(split_view.source_pane.source_scroll.source_text_label))
@@ -1083,7 +1060,7 @@ impl TranslationOverlay {
         self.passthrough = passthrough;
         self.source_lang_code = source_lang.to_string();
         self.target_lang_code = target_lang.to_string();
-        self.update_split_chips(cx);
+        self.update_split_layout(cx);
         let placeholder_lang = if passthrough {
             source_lang
         } else {
@@ -1202,7 +1179,12 @@ impl TranslationOverlay {
         self.src_scroll_cur = 0.0;
         self.src_scroll_target = 0.0;
         self.view
-            .label(ids!(split_view.translation_pane.translation_scroll.translation_text))
+            .label(ids!(
+                split_view
+                    .translation_pane
+                    .translation_scroll
+                    .translation_text
+            ))
             .set_text(cx, "");
         self.view
             .label(ids!(split_view.source_pane.source_scroll.source_text_label))
@@ -1264,18 +1246,10 @@ mod tests {
     }
 
     #[test]
-    fn footer_font_size_value_parses_known_presets() {
-        assert_eq!(TranslationOverlay::footer_font_size_value("10"), 10.0);
-        assert_eq!(TranslationOverlay::footer_font_size_value("20"), 20.0);
-        assert_eq!(TranslationOverlay::footer_font_size_value("16"), 16.0);
-    }
-
-    #[test]
-    fn footer_logo_size_tracks_large_tagline_sizes() {
-        assert_eq!(TranslationOverlay::footer_logo_size_value("10"), 22.0);
-        assert_eq!(TranslationOverlay::footer_logo_size_value("22"), 22.0);
-        assert_eq!(TranslationOverlay::footer_logo_size_value("30"), 30.0);
-        assert_eq!(TranslationOverlay::footer_logo_size_value("32"), 32.0);
+    fn footer_font_size_value_keeps_swiss_footer_compact() {
+        assert_eq!(TranslationOverlay::footer_font_size_value("10"), 9.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value("20"), 10.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value("32"), 14.0);
     }
 
     #[test]
@@ -1290,8 +1264,8 @@ mod tests {
 
     #[test]
     fn footer_font_size_value_falls_back_when_invalid() {
-        assert_eq!(TranslationOverlay::footer_font_size_value(""), 20.0);
-        assert_eq!(TranslationOverlay::footer_font_size_value("abc"), 20.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value(""), 10.0);
+        assert_eq!(TranslationOverlay::footer_font_size_value("abc"), 10.0);
     }
 
     #[test]

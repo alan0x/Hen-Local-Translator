@@ -1,0 +1,47 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Hen Local Translator",
+  "version": "1.1.0",
+  "identifier": "com.henlocal.translator",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "ui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Hen Local Translator",
+        "url": "index.html",
+        "width": 1180,
+        "height": 640,
+        "minWidth": 1020,
+        "minHeight": 560,
+        "resizable": true,
+        "center": true,
+        "backgroundColor": "#ffffff"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ],
+    "resources": [
+      "../apps/hen-local-translator/dataflow/translation_qwen35.yml",
+      "../node-hub/dora-qwen3-tts-mlx/previews/vivian.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/serena.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/ryan.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/aiden.wav",
+      "../node-hub/dora-qwen3-tts-mlx/voices/baiyang/ref.wav",
+      "../node-hub/dora-qwen3-tts-mlx/voices/yangyang/ref.wav"
+    ]
+  }
+}

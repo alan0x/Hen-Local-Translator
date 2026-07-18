@@ -29,6 +29,15 @@ pub struct AppPreferences {
     pub translation_periodic_save_transcript: bool,
     pub translation_transcript_file_name: String,
     pub translation_transcript_save_dir: Option<String>,
+    pub translation_source_language: String,
+    pub translation_target_language: String,
+    /// `__system_audio__`, `__default_microphone__`, or a concrete CPAL device name.
+    pub translation_input_device: String,
+    pub translation_overlay_fullscreen: bool,
+    pub translation_subtitle_split: bool,
+    pub translation_overlay_opacity: f64,
+    pub translation_font_size_preset: String,
+    pub translation_anchor_position_preset: String,
     pub experimental_spoken_translation_enabled: bool,
     pub experimental_spoken_translation_output_device: Option<String>,
     pub experimental_spoken_translation_voice: Option<String>,
@@ -57,6 +66,14 @@ impl Default for AppPreferences {
             translation_periodic_save_transcript: false,
             translation_transcript_file_name: "transcript.md".to_string(),
             translation_transcript_save_dir: None,
+            translation_source_language: "zh".to_string(),
+            translation_target_language: "en".to_string(),
+            translation_input_device: "__system_audio__".to_string(),
+            translation_overlay_fullscreen: true,
+            translation_subtitle_split: true,
+            translation_overlay_opacity: 1.0,
+            translation_font_size_preset: "24".to_string(),
+            translation_anchor_position_preset: "50".to_string(),
             experimental_spoken_translation_enabled: false,
             experimental_spoken_translation_output_device: None,
             experimental_spoken_translation_voice: None,
@@ -127,7 +144,33 @@ pub fn load_preferences() -> AppPreferences {
 }
 
 fn sanitize_loaded_preferences(mut prefs: AppPreferences) -> AppPreferences {
-    prefs.experimental_spoken_translation_enabled = false;
+    if !matches!(
+        prefs.translation_source_language.as_str(),
+        "zh" | "en" | "ja" | "fr"
+    ) {
+        prefs.translation_source_language = "zh".to_string();
+    }
+    if !matches!(
+        prefs.translation_target_language.as_str(),
+        "en" | "zh" | "ja" | "fr" | "none"
+    ) {
+        prefs.translation_target_language = "en".to_string();
+    }
+    if !matches!(
+        prefs.translation_font_size_preset.as_str(),
+        "16" | "20" | "24" | "30" | "36" | "44" | "52" | "64" | "80" | "96" | "120" | "160"
+    ) {
+        prefs.translation_font_size_preset = "24".to_string();
+    }
+    if !matches!(
+        prefs.translation_anchor_position_preset.as_str(),
+        "35" | "50" | "70" | "100"
+    ) {
+        prefs.translation_anchor_position_preset = "50".to_string();
+    }
+    if !(0.35..=1.0).contains(&prefs.translation_overlay_opacity) {
+        prefs.translation_overlay_opacity = 1.0;
+    }
     prefs
 }
 
@@ -227,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn loaded_preferences_do_not_restore_spoken_translation_enabled() {
+    fn loaded_preferences_restore_spoken_translation_enabled() {
         let prefs = AppPreferences {
             experimental_spoken_translation_enabled: true,
             experimental_spoken_translation_output_device: Some("Headsets".to_string()),
@@ -237,7 +280,7 @@ mod tests {
 
         let prefs = sanitize_loaded_preferences(prefs);
 
-        assert!(!prefs.experimental_spoken_translation_enabled);
+        assert!(prefs.experimental_spoken_translation_enabled);
         assert_eq!(
             prefs
                 .experimental_spoken_translation_output_device
@@ -248,5 +291,25 @@ mod tests {
             prefs.experimental_spoken_translation_voice.as_deref(),
             Some("Samantha")
         );
+    }
+
+    #[test]
+    fn invalid_translation_preferences_fall_back_to_safe_defaults() {
+        let prefs = AppPreferences {
+            translation_source_language: "xx".to_string(),
+            translation_target_language: "yy".to_string(),
+            translation_overlay_opacity: 0.1,
+            translation_font_size_preset: "999".to_string(),
+            translation_anchor_position_preset: "42".to_string(),
+            ..AppPreferences::default()
+        };
+
+        let prefs = sanitize_loaded_preferences(prefs);
+
+        assert_eq!(prefs.translation_source_language, "zh");
+        assert_eq!(prefs.translation_target_language, "en");
+        assert_eq!(prefs.translation_overlay_opacity, 1.0);
+        assert_eq!(prefs.translation_font_size_preset, "24");
+        assert_eq!(prefs.translation_anchor_position_preset, "50");
     }
 }

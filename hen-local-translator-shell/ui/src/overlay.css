@@ -1,0 +1,183 @@
+:root {
+  font-family: Inter, "Helvetica Neue", Helvetica, "SF Pro Display", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  color: #f6f7f8;
+  background: #050607;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #050607; }
+
+.overlay-shell {
+  --subtitle-size: 24px;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: #050607;
+  color: #f6f7f8;
+  cursor: grab;
+  user-select: none;
+}
+
+.overlay-shell:active { cursor: grabbing; }
+.drag-strip { position: absolute; z-index: 5; inset: 0 0 auto; height: 22px; }
+
+.subtitle-feed {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 34px 38px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  scroll-behavior: smooth;
+  overscroll-behavior: none;
+  cursor: grab;
+}
+
+.subtitle-feed::-webkit-scrollbar { display: none; }
+
+.stacked-feed {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 34px 38px 30px;
+  display: grid;
+  grid-template-rows: minmax(0, 54fr) minmax(0, 46fr);
+}
+
+.language-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: none;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  padding: 20px 22px;
+  user-select: text;
+  cursor: text;
+}
+
+.language-pane::-webkit-scrollbar { display: none; }
+.pane-content { display: flex; flex-direction: column; gap: .58em; }
+.pane-line { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.target-line {
+  color: #f7f8fa;
+  font-size: calc(var(--subtitle-size) * 1.04);
+  line-height: 1.34;
+  font-weight: 620;
+  letter-spacing: -.022em;
+}
+.source-line {
+  color: #c8ccd2;
+  font-size: calc(var(--subtitle-size) * .86);
+  line-height: 1.42;
+  font-weight: 540;
+  letter-spacing: -.015em;
+}
+.pending-line { color: #d8dbe0; }
+
+.brand-footer {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .7em;
+  padding: 10px 38px;
+  background: #050607;
+  color: #bfc3c9;
+  font-size: var(--subtitle-size);
+  line-height: 1;
+  font-weight: 680;
+  letter-spacing: -.015em;
+  cursor: grab;
+}
+
+.brand-logo {
+  width: 1.35em;
+  height: 1.35em;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.brand-name { color: #f6f7f8; }
+.brand-tagline {
+  color: #9da2aa;
+  font-size: .58em;
+  font-weight: 560;
+  letter-spacing: .06em;
+}
+
+.subtitle-entry {
+  flex: 0 0 auto;
+  display: block;
+  animation: reveal-entry 180ms ease-out both;
+}
+
+.subtitle-entry p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  padding: 18px 22px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  user-select: text;
+  cursor: text;
+}
+
+.subtitle-entry .translation {
+  color: #f7f8fa;
+  font-size: calc(var(--subtitle-size) * 1.04);
+  line-height: 1.34;
+  font-weight: 620;
+  letter-spacing: -.022em;
+}
+
+.subtitle-entry .source {
+  color: #c8ccd2;
+  font-size: calc(var(--subtitle-size) * .86);
+  line-height: 1.42;
+  font-weight: 540;
+  letter-spacing: -.015em;
+}
+
+.subtitle-entry.pending .translation { color: transparent; }
+.subtitle-entry.pending .source { color: #d8dbe0; }
+
+.overlay-shell.sentence-pairs .subtitle-feed { gap: 0; }
+.overlay-shell.sentence-pairs .subtitle-entry p { min-height: 0; }
+.overlay-shell.sentence-pairs .translation { padding: 15px 18px 7px; }
+.overlay-shell.sentence-pairs .source { padding: 5px 18px 15px; background: #050607; }
+
+.empty-transcript {
+  flex: 1 0 100%;
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: 54% 46%;
+}
+
+.empty-zone { min-height: 0; background: #050607; }
+
+@keyframes reveal-entry {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 680px) {
+  .subtitle-feed, .stacked-feed { padding: 28px 24px 24px; }
+  .subtitle-entry p { padding: 15px 17px; }
+  .language-pane { padding: 17px; }
+  .brand-footer { padding-inline: 24px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitle-feed { scroll-behavior: auto; }
+  .subtitle-entry { animation: none; }
+}

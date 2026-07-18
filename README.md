@@ -1,6 +1,6 @@
 # Hen Local Translator
 
-Offline live speech translation for macOS, built with Rust, Makepad, Dora, and OminiX MLX.
+Offline live speech translation for macOS, built with Rust, Tauri 2, Svelte, Dora, and OminiX MLX.
 
 Hen Local Translator focuses on one workflow: capture microphone or system audio, transcribe it with Qwen3-ASR, translate committed speech chunks with the Qwen3.5 translator node, and display bilingual subtitles in a floating overlay.
 
@@ -18,6 +18,7 @@ Hen Local Translator focuses on one workflow: capture microphone or system audio
 - Apple Silicon Mac
 - macOS 14.0+ recommended
 - Rust 1.82+
+- Node.js 20+ and npm
 - Dora CLI (`cargo install dora-cli`)
 - Python 3.8+ only for the optional development model download helper
 
@@ -43,11 +44,20 @@ Packaged builds use the bundled `hen-local-init` helper for first-run model boot
 ## Build And Run
 
 ```bash
-cargo build --release
-cargo run -p hen-local-translator-shell
+npm --prefix hen-local-translator-shell/ui install
+npm --prefix hen-local-translator-shell/ui run desktop:dev
 ```
 
-Some source directories still carry the original fork names during the staged cleanup, but the Cargo packages, product surface, and packaged app are now Hen Local Translator.
+The desktop command builds MLX-backed translation nodes in a temporary Cargo target directory whose path contains no spaces. This is required because MLX 0.30.1 can generate invalid Metal JIT sources when Cargo's target path contains spaces (for example, the `Moxin AI` workspace directory).
+
+Useful checks:
+
+```bash
+npm --prefix hen-local-translator-shell/ui run check
+cargo test -p hen-local-translator-shell
+```
+
+Some source directories still carry the original fork names during the staged cleanup, but the active desktop shell and product surface are now Hen Local Translator.
 
 ## Translation Dataflow
 

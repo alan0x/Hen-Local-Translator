@@ -1,700 +1,833 @@
-//! Hen Local Translator App - Main application
-//!
-//! This shell hosts the translation control screen and the floating subtitle overlay.
+use crate::{
+    dataflow::{render_translation_dataflow, RenderOptions},
+    preferences::{self, AppPreferences},
+    runtime::{RuntimeEvent, TranslationRuntime},
+    Args,
+};
+use cpal::traits::{DeviceTrait, HostTrait};
+use moxin_dora_bridge::{data::SentenceUnit, AudioSource, TranslationUpdate};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::{Child, Command},
+    thread,
+    time::Duration,
+};
+use tauri::{
+    Emitter, LogicalSize, Manager, Size, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    WindowEvent,
+};
 
-use hen_local_translator::HenLocalTranslatorApp;
-use hen_local_translator::TTSScreenWidgetRefExt;
-use makepad_widgets::event::WindowGeom;
-use makepad_widgets::*;
-use moxin_widgets::translation_overlay::TranslationOverlay;
-use moxin_widgets::MoxinApp;
-use std::sync::OnceLock;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationSettings {
+    app_language: String,
+    source_language: String,
+    target_language: String,
+    input_device: String,
+    overlay_fullscreen: bool,
+    subtitle_split: bool,
+    overlay_opacity: f64,
+    font_size_preset: String,
+    anchor_position_preset: String,
+    spoken_translation_enabled: bool,
+    spoken_translation_output_device: Option<String>,
+    spoken_translation_voice: Option<String>,
+    auto_save_transcript: bool,
+    periodic_save_transcript: bool,
+    transcript_file_name: String,
+    transcript_save_dir: Option<String>,
+}
 
-// ── macOS window alpha ────────────────────────────────────────────────────────
-// Sets NSWindow.alphaValue on the window whose title contains `title_fragment`.
-// NSWindow.alphaValue composites the entire window at the given opacity against
-// the screen content behind it — no Makepad patches required.
-#[cfg(target_os = "macos")]
-unsafe fn set_nswindow_alpha(title_fragment: &str, alpha: f64) {
-    use makepad_objc_sys::runtime::Object;
-    #[allow(unused_imports)]
-    use makepad_objc_sys::{class, msg_send, sel, sel_impl};
-    let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
-    let windows: *mut Object = msg_send![app, windows];
-    let count: usize = msg_send![windows, count];
-    for i in 0..count {
-        let win: *mut Object = msg_send![windows, objectAtIndex: i];
-        let title: *mut Object = msg_send![win, title];
-        if title.is_null() {
-            continue;
-        }
-        let utf8: *const std::os::raw::c_char = msg_send![title, UTF8String];
-        if utf8.is_null() {
-            continue;
-        }
-        let s = std::ffi::CStr::from_ptr(utf8).to_str().unwrap_or("");
-        if s.contains(title_fragment) {
-            let () = msg_send![win, setAlphaValue: alpha];
-            return;
+impl From<&AppPreferences> for TranslationSettings {
+    fn from(preferences: &AppPreferences) -> Self {
+        Self {
+            app_language: preferences.app_language.clone(),
+            source_language: preferences.translation_source_language.clone(),
+            target_language: preferences.translation_target_language.clone(),
+            input_device: preferences.translation_input_device.clone(),
+            overlay_fullscreen: preferences.translation_overlay_fullscreen,
+            subtitle_split: preferences.translation_subtitle_split,
+            overlay_opacity: preferences.translation_overlay_opacity,
+            font_size_preset: preferences.translation_font_size_preset.clone(),
+            anchor_position_preset: preferences.translation_anchor_position_preset.clone(),
+            spoken_translation_enabled: preferences.experimental_spoken_translation_enabled,
+            spoken_translation_output_device: preferences
+                .experimental_spoken_translation_output_device
+                .clone(),
+            spoken_translation_voice: preferences.experimental_spoken_translation_voice.clone(),
+            auto_save_transcript: preferences.translation_auto_save_transcript,
+            periodic_save_transcript: preferences.translation_periodic_save_transcript,
+            transcript_file_name: preferences.translation_transcript_file_name.clone(),
+            transcript_save_dir: preferences.translation_transcript_save_dir.clone(),
         }
     }
 }
 
-// ── macOS hide traffic lights ─────────────────────────────────────────────────
-// Hides the close/minimize/zoom buttons on the window whose title contains
-// `title_fragment`. Hidden state persists across minimize/restore cycles.
-#[cfg(target_os = "macos")]
-unsafe fn hide_nswindow_traffic_lights(title_fragment: &str) {
-    use makepad_objc_sys::runtime::{Object, YES};
-    #[allow(unused_imports)]
-    use makepad_objc_sys::{class, msg_send, sel, sel_impl};
-    let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
-    let windows: *mut Object = msg_send![app, windows];
-    let count: usize = msg_send![windows, count];
-    for i in 0..count {
-        let win: *mut Object = msg_send![windows, objectAtIndex: i];
-        let title: *mut Object = msg_send![win, title];
-        if title.is_null() {
-            continue;
-        }
-        let utf8: *const std::os::raw::c_char = msg_send![title, UTF8String];
-        if utf8.is_null() {
-            continue;
-        }
-        let s = std::ffi::CStr::from_ptr(utf8).to_str().unwrap_or("");
-        if s.contains(title_fragment) {
-            // NSWindowCloseButton=0, NSWindowMiniaturizeButton=1, NSWindowZoomButton=2
-            for btn_type in [0usize, 1usize, 2usize] {
-                let btn: *mut Object = msg_send![win, standardWindowButton: btn_type];
-                if !btn.is_null() {
-                    let () = msg_send![btn, setHidden: YES];
-                }
-            }
-            return;
+impl TranslationSettings {
+    fn apply_to(&self, preferences: &mut AppPreferences) {
+        preferences.app_language = self.app_language.clone();
+        preferences.translation_source_language = self.source_language.clone();
+        preferences.translation_target_language = self.target_language.clone();
+        preferences.translation_input_device = self.input_device.clone();
+        preferences.translation_overlay_fullscreen = self.overlay_fullscreen;
+        preferences.translation_subtitle_split = self.subtitle_split;
+        preferences.translation_overlay_opacity = self.overlay_opacity.clamp(0.35, 1.0);
+        preferences.translation_font_size_preset = self.font_size_preset.clone();
+        preferences.translation_anchor_position_preset = self.anchor_position_preset.clone();
+        preferences.experimental_spoken_translation_enabled = self.spoken_translation_enabled;
+        preferences.experimental_spoken_translation_output_device =
+            self.spoken_translation_output_device.clone();
+        preferences.experimental_spoken_translation_voice = self.spoken_translation_voice.clone();
+        preferences.translation_auto_save_transcript = self.auto_save_transcript;
+        preferences.translation_periodic_save_transcript = self.periodic_save_transcript;
+        preferences.translation_transcript_file_name = self.transcript_file_name.clone();
+        preferences.translation_transcript_save_dir = self.transcript_save_dir.clone();
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SettingsPayload {
+    settings: TranslationSettings,
+    input_devices: Vec<String>,
+    output_devices: Vec<String>,
+    subtitle_preview_visible: bool,
+    running: bool,
+    runtime_status: String,
+    runtime_message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeState {
+    running: bool,
+    status: String,
+    message: String,
+}
+
+impl Default for RuntimeState {
+    fn default() -> Self {
+        Self {
+            running: false,
+            status: "idle".into(),
+            message: "Local AI is ready".into(),
         }
     }
 }
 
-// ── macOS dock-icon reopen handler ────────────────────────────────────────────
-// Adds `applicationShouldHandleReopen:hasVisibleWindows:` to Makepad's existing
-// `NSAppDelegate` class and forces AppKit to refresh its `respondsToSelector:`
-// cache by detaching and re-attaching the delegate. This callback is fired by
-// AppKit on every dock-icon click, including the case the user cares about:
-// the translation overlay is visible and obscuring the main window.
-//
-// Direct ObjC reordering inside this callback has been observed to be silently
-// dropped — AppKit appears to re-assert window ordering after the callback
-// returns. Instead, the handler only sets the static `DOCK_RAISE_REQUESTED`
-// flag; the actual reorder is performed from `handle_timer` (poll cadence is
-// 50 ms), where the runloop is in a clean state and the changes stick.
-//
-// The handler returns NO so AppKit does not run its default reopen behavior,
-// which would re-foreground the most-recently-used window (the overlay).
-#[cfg(target_os = "macos")]
-static DOCK_RAISE_REQUESTED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-#[cfg(target_os = "macos")]
-unsafe fn install_dock_reopen_handler() {
-    use makepad_objc_sys::runtime::{
-        class_addMethod, class_getInstanceMethod, method_setImplementation, object_getClass,
-        sel_registerName, Class, Imp, Method, Object, Sel, BOOL, YES,
-    };
-    #[allow(unused_imports)]
-    use makepad_objc_sys::{class, msg_send, sel, sel_impl};
-    use std::os::raw::c_char;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    static INSTALLED: AtomicBool = AtomicBool::new(false);
-    if INSTALLED.swap(true, Ordering::SeqCst) {
-        return;
-    }
-
-    extern "C" fn should_handle_reopen(
-        _self: *mut Object,
-        _cmd: Sel,
-        _app_arg: *mut Object,
-        _has_visible: BOOL,
-    ) -> BOOL {
-        use makepad_objc_sys::runtime::NO;
-        DOCK_RAISE_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
-        ::log::info!("[dock] reopen requested -> raise pending");
-        NO
-    }
-
-    let app: *mut Object = msg_send![class!(NSApplication), sharedApplication];
-    let delegate: *mut Object = msg_send![app, delegate];
-    if delegate.is_null() {
-        ::log::warn!("[dock] NSApp delegate is nil; reopen handler skipped");
-        INSTALLED.store(false, Ordering::SeqCst);
-        return;
-    }
-
-    let cls = object_getClass(delegate as *const Object) as *mut Class;
-    let sel_bytes = b"applicationShouldHandleReopen:hasVisibleWindows:\0";
-    let sel: Sel = sel_registerName(sel_bytes.as_ptr() as *const c_char);
-
-    // Type encoding: BOOL ret, self (@), _cmd (:), NSApp (@), BOOL.
-    // makepad_objc_sys defines BOOL as `bool` on aarch64 (encoded "B") and
-    // `c_schar` elsewhere (encoded "c").
-    #[cfg(target_arch = "aarch64")]
-    let types: &[u8] = b"B@:@B\0";
-    #[cfg(not(target_arch = "aarch64"))]
-    let types: &[u8] = b"c@:@c\0";
-
-    let imp: Imp = std::mem::transmute(should_handle_reopen as *const ());
-
-    let added = class_addMethod(cls, sel, imp, types.as_ptr() as *const c_char);
-    if added != YES {
-        // Method already exists on the class — replace its implementation.
-        let method = class_getInstanceMethod(cls as *const Class, sel) as *mut Method;
-        if method.is_null() {
-            ::log::warn!("[dock] failed to add or locate reopen method");
-            INSTALLED.store(false, Ordering::SeqCst);
-            return;
-        }
-        let _ = method_setImplementation(method, imp);
-    }
-
-    // AppKit caches the delegate's `respondsToSelector:` results at the time
-    // `setDelegate:` is called. Because Makepad set the delegate before our
-    // method existed, we have to detach and re-attach it to force AppKit to
-    // re-query and pick up `applicationShouldHandleReopen:hasVisibleWindows:`.
-    let nilp: *mut Object = std::ptr::null_mut();
-    let _: () = msg_send![app, setDelegate: nilp];
-    let _: () = msg_send![app, setDelegate: delegate];
-
-    ::log::info!("[dock] installed applicationShouldHandleReopen:hasVisibleWindows:");
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Sentence {
+    source_text: String,
+    translation: String,
 }
 
-use crate::Args;
-
-// ============================================================================
-// CLI ARGS STORAGE
-// ============================================================================
-
-static CLI_ARGS: OnceLock<Args> = OnceLock::new();
-
-pub fn set_cli_args(args: Args) {
-    CLI_ARGS.set(args).ok();
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OverlayState {
+    active: bool,
+    status: String,
+    source_language: String,
+    target_language: String,
+    subtitle_split: bool,
+    font_size: u32,
+    anchor_position: u32,
+    history: Vec<Sentence>,
+    pending_source_text: String,
 }
 
-pub fn get_cli_args() -> &'static Args {
-    CLI_ARGS.get_or_init(Args::default)
+struct AppState {
+    preferences: Mutex<AppPreferences>,
+    runtime: TranslationRuntime,
+    runtime_state: Mutex<RuntimeState>,
+    resource_dir: Option<PathBuf>,
+    voice_preview_process: Mutex<Option<Child>>,
+    subtitle_preview_visible: Mutex<bool>,
 }
 
-// ============================================================================
-// UI DEFINITIONS
-// ============================================================================
-
-live_design! {
-    use link::theme::*;
-    use link::shaders::*;
-    use link::widgets::*;
-
-    use moxin_widgets::theme::DARK_BG;
-    use moxin_widgets::theme::MOXIN_BG_PRIMARY_DARK;
-
-    // Import translation control screen. The type name is still TTSScreen during
-    // the staged cleanup because the old screen module owns the live translation UI.
-    use hen_local_translator::screen::TTSScreen;
-
-    // Import translation overlay widget
-    use moxin_widgets::translation_overlay::TranslationOverlay;
-
-    // ========================================================================
-    // App Window - translation controls
-    // ========================================================================
-
-    App = {{App}} {
-        ui: <Window> {
-            window: {
-                title: "Hen Local Translator"
-                inner_size: vec2(1200, 800)
-            }
-            pass: { clear_color: (DARK_BG) }
-
-            body = <View> {
-                width: Fill, height: Fill
-                flow: Down
-
-                // Direct translation control screen
-                tts_screen = <TTSScreen> {}
-            }
-        }
-
-        // ── Translation Overlay Window ────────────────────────────────────────
-        // Starts hidden. Shown when the user activates translation mode in
-        // the main screen. The window floats independently over any content.
-        translation_ui: <Window> {
-            window: {
-                title: "Hen Local Translator - Translation"
-                inner_size: vec2(600, 260)
-                position: vec2(100, 100)
-            }
-            pass: { clear_color: (MOXIN_BG_PRIMARY_DARK) }
-            visible: false
-
-            body = <View> {
-                width: Fill, height: Fill
-
-                translation_overlay = <TranslationOverlay> {}
-            }
-        }
-    }
-}
-
-// ============================================================================
-// APP STRUCT
-// ============================================================================
-
-#[derive(Live, LiveHook)]
-pub struct App {
-    #[live]
-    ui: WidgetRef,
-
-    /// Translation overlay window (independent OS window)
-    #[live]
-    translation_ui: WidgetRef,
-
-    /// Poll timer for reading SharedDoraState updates
-    #[rust]
-    poll_timer: Timer,
-
-    #[rust]
-    main_window_id: Option<WindowId>,
-
-    #[rust]
-    translation_window_id: Option<WindowId>,
-
-    #[rust]
-    translation_overlay_visible: bool,
-
-    /// Last opacity applied to the translation window; avoids per-tick ObjC calls.
-    #[rust]
-    last_overlay_opacity: f64,
-}
-
-impl LiveRegister for App {
-    fn live_register(cx: &mut Cx) {
-        ::log::info!("LiveRegister::live_register called");
-
-        // Register Makepad core widgets (Window, View, etc.)
-        ::log::info!("Registering makepad_widgets");
-        makepad_widgets::live_design(cx);
-
-        // Register shared widgets and theme
-        ::log::info!("Registering moxin_widgets");
-        moxin_widgets::live_design(cx);
-        ::log::info!("Registering moxin_ui");
-        moxin_ui::live_design(cx);
-
-        // Register app widgets
-        ::log::info!("Registering translation app widgets");
-        HenLocalTranslatorApp::live_design(cx);
-
-        ::log::info!("LiveRegister::live_register completed");
-    }
-}
-
-impl AppMain for App {
-    fn handle_event(&mut self, cx: &mut Cx, event: &Event) {
-        if let Event::WindowGeomChange(ev) = event {
-            if self.translation_window_id.is_none()
-                && Self::is_translation_window_geom(&ev.new_geom)
-            {
-                self.translation_window_id = Some(ev.window_id);
-                ::log::info!("[translation_ui] detected window_id={:?}", ev.window_id);
-                // Remove traffic light buttons from the overlay window.
-                #[cfg(target_os = "macos")]
-                unsafe {
-                    hide_nswindow_traffic_lights("Translation");
-                }
-            } else if self.main_window_id.is_none() {
-                self.main_window_id = Some(ev.window_id);
-                ::log::info!("[main_ui] detected window_id={:?}", ev.window_id);
-            } else if self.translation_window_id == Some(ev.window_id) {
-                // Keep anchor formula in sync with real window size (including
-                // user resize and platform-specific window state transitions).
-                let viewport_h = (ev.new_geom.inner_size.y - 38.0).max(0.0);
-                let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-                if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                    overlay.set_viewport_height(cx, viewport_h);
-                };
-            }
-        }
-
-        if let Event::WindowCloseRequested(ev) = event {
-            if self.translation_window_id == Some(ev.window_id) {
-                // Prevent actual destroy; treat close as "hide".
-                ev.accept_close.set(false);
-                cx.push_unique_platform_op(CxOsOp::MinimizeWindow(ev.window_id));
-                ::log::info!("[translation_ui] close intercepted -> minimize");
-            } else if Self::should_intercept_main_window_close(
-                Some(ev.window_id),
-                self.main_window_id,
-            ) {
-                // Keep the main window restorable from the dock instead of
-                // letting macOS promote the minimized overlay as the only window.
-                ev.accept_close.set(false);
-                cx.push_unique_platform_op(CxOsOp::MinimizeWindow(ev.window_id));
-                ::log::info!("[main_ui] close intercepted -> minimize");
-            }
-        }
-
-        if let Event::WindowGotFocus(window_id) = event {
-            if Self::should_redirect_overlay_focus(
-                Some(*window_id),
-                self.translation_window_id,
-                self.main_window_id,
-                self.translation_overlay_visible,
-            ) {
-                ::log::info!(
-                    "[translation_ui] unexpected focus while hidden -> restore main window"
-                );
-                cx.push_unique_platform_op(CxOsOp::MinimizeWindow(*window_id));
-                if let Some(main_window_id) = self.main_window_id {
-                    #[cfg(target_os = "macos")]
-                    cx.push_unique_platform_op(CxOsOp::Deminiaturize(main_window_id));
-                    #[cfg(not(target_os = "macos"))]
-                    cx.push_unique_platform_op(CxOsOp::RestoreWindow(main_window_id));
-                }
-            }
-        }
-
-        self.ui.handle_event(cx, event, &mut Scope::empty());
-        self.translation_ui
-            .handle_event(cx, event, &mut Scope::empty());
-        self.match_event(cx, event);
-    }
-}
-
-impl MatchEvent for App {
-    fn handle_actions(&mut self, cx: &mut Cx, actions: &Actions) {
-        if self
-            .translation_ui
-            .button(ids!(
-                body.translation_overlay
-                    .overlay_footer
-                    .footer_controls
-                    .overlay_stop_btn
-            ))
-            .clicked(actions)
-        {
-            self.ui
-                .ttsscreen(ids!(body.tts_screen))
-                .stop_translation_from_overlay(cx);
-        }
-    }
-
-    fn handle_startup(&mut self, cx: &mut Cx) {
-        ::log::info!("Hen Local Translator application started");
-
-        // Inject a dock-icon reopen handler so that clicking the dock icon
-        // always raises the main window — even when the translation overlay
-        // is fullscreen on its own Space and would otherwise stay foreground.
-        #[cfg(target_os = "macos")]
-        unsafe {
-            install_dock_reopen_handler();
-        }
-
-        // Keep window widget itself visible; use OS minimize/restore for show/hide.
-        // Otherwise an OS-restored window may render only clear color (black) with no widgets.
-        self.translation_ui.set_visible(cx, true);
-
-        // Start Dora dataflow if specified
-        if let Some(dataflow_path) = &get_cli_args().dataflow {
-            ::log::info!("Starting Dora dataflow: {}", dataflow_path);
-            // TODO: Start dataflow via app_data's dora_state
-            // This would typically involve calling dora_state.start_dataflow(dataflow_path)
-        }
-
-        // Poll SharedDoraState every 50 ms for translation updates
-        self.poll_timer = cx.start_interval(0.05);
-        self.main_window_id = None;
-        self.translation_overlay_visible = false;
-        self.last_overlay_opacity = -1.0; // force first apply
-
-        // Set initial scroll anchor for compact window (260px high, 44px toolbar → 216px viewport).
-        let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-        if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-            overlay.set_viewport_height(cx, 222.0);
-            overlay.set_font_size_preset(cx, "24");
-            overlay.set_anchor_position_preset(cx, "50");
-        }
-
-        ::log::info!("Hen Local Translator initialization complete");
-    }
-
-    fn handle_timer(&mut self, cx: &mut Cx, event: &TimerEvent) {
-        if self.poll_timer.is_timer(event).is_none() {
-            return;
-        }
-
-        // Apply any pending dock-icon reopen request. Direct ObjC reordering
-        // from the AppKit reopen callback was observed to be silently dropped
-        // in this Makepad-hosted setup; minimizing the overlay via Makepad's
-        // own CxOsOp pipeline (a code path already proven to work elsewhere
-        // in this app) makes the main window naturally accessible again.
-        #[cfg(target_os = "macos")]
-        if DOCK_RAISE_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
-            if let Some(translation_window_id) = self.translation_window_id {
-                cx.push_unique_platform_op(CxOsOp::MinimizeWindow(translation_window_id));
-                ::log::info!("[dock] minimized overlay so main becomes accessible");
-            }
-        }
-
-        let dora_state = match self
-            .ui
-            .ttsscreen(ids!(body.tts_screen))
-            .translation_shared_dora_state()
-        {
-            Some(state) => state,
-            None => return,
+impl AppState {
+    fn new(resource_dir: Option<PathBuf>) -> Self {
+        let preferences = preferences::load();
+        let settings = TranslationSettings::from(&preferences);
+        let runtime = TranslationRuntime::new();
+        let state = Self {
+            preferences: Mutex::new(preferences),
+            runtime,
+            runtime_state: Mutex::new(RuntimeState::default()),
+            resource_dir,
+            voice_preview_process: Mutex::new(None),
+            subtitle_preview_visible: Mutex::new(true),
         };
+        state.sync_shared_state();
+        state.show_subtitle_preview(&settings);
+        state
+    }
 
-        // ── Translation window visibility ─────────────────────────────────────
-        if let Some(visible) = dora_state.translation_window_visible.read_if_dirty() {
-            let window_visible: bool = visible;
-            self.translation_overlay_visible = window_visible;
-            ::log::info!("[translation_ui] set_visible={}", window_visible);
-            if let Some(window_id) = self.translation_window_id {
-                if window_visible {
-                    #[cfg(target_os = "macos")]
-                    cx.push_unique_platform_op(CxOsOp::Deminiaturize(window_id));
-                    #[cfg(not(target_os = "macos"))]
-                    cx.push_unique_platform_op(CxOsOp::RestoreWindow(window_id));
-                } else {
-                    cx.push_unique_platform_op(CxOsOp::MinimizeWindow(window_id));
-                }
-            }
-
-            // Reset overlay content on hide so a future re-open starts clean.
-            if !window_visible {
-                let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-                if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                    overlay.clear(cx);
-                };
-            }
-        }
-
-        // ── Translation overlay fullscreen toggle ─────────────────────────────
-        if let Some(fullscreen) = dora_state.translation_overlay_fullscreen.read_if_dirty() {
-            let size = if fullscreen {
-                dvec2(900.0, 600.0)
-            } else {
-                dvec2(600.0, 260.0)
-            };
-            self.translation_ui.as_window().resize(cx, size);
-            // No toolbar anymore — viewport height is the full inner size minus
-            // the (auto-sized) footer; the widget falls back to measured height
-            // when this hint is too coarse, so passing the full size is fine.
-            let viewport_h = size.y;
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_viewport_height(cx, viewport_h);
-            };
-        }
-
-        // ── Translation content update ────────────────────────────────────────
-        if let Some(update_opt) = dora_state.translation.read_if_dirty() {
-            ::log::info!(
-                "[translation_ui] received update: {}",
-                match &update_opt {
-                    Some(u) => format!(
-                        "history={}, pending_len={}",
-                        u.history.len(),
-                        u.pending_source_text.len(),
-                    ),
-                    None => "clear".to_string(),
-                }
-            );
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                match &update_opt {
-                    Some(update) => {
-                        let history: Vec<(String, String)> = update
-                            .history
-                            .iter()
-                            .map(|u| (u.source_text.clone(), u.translation.clone()))
-                            .collect();
-                        overlay.set_translation_update(cx, &history, &update.pending_source_text);
-                    }
-                    None => {
-                        overlay.clear(cx);
-                    }
-                }
-            } else {
-                ::log::warn!("[translation_ui] TranslationOverlay borrow_mut failed");
-            };
-            self.translation_ui.redraw(cx);
-        }
-
-        if let Some(locale_en) = dora_state.translation_locale_en.read_if_dirty() {
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_locale(cx, locale_en);
-            };
-        }
-        if let Some((src, tgt)) = dora_state.translation_lang_pair.read_if_dirty() {
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_language_pair(cx, &src, &tgt);
-            };
-        }
-
-        if let Some(preset) = dora_state.translation_font_size_preset.read_if_dirty() {
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_font_size_preset(cx, &preset);
-            };
-        }
-
-        if let Some(preset) = dora_state
-            .translation_footer_font_size_preset
-            .read_if_dirty()
-        {
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_footer_font_size_preset(cx, &preset);
-            };
-        }
-
-        if let Some(preset) = dora_state
+    fn sync_shared_state(&self) {
+        let preferences = self.preferences.lock().clone();
+        let shared = self.runtime.shared_state();
+        shared.translation_window_visible.set(true);
+        shared
+            .translation_locale_en
+            .set(preferences.app_language == "en");
+        shared.translation_lang_pair.set((
+            preferences.translation_source_language.clone(),
+            preferences.translation_target_language.clone(),
+        ));
+        shared
+            .translation_overlay_fullscreen
+            .set(preferences.translation_overlay_fullscreen);
+        shared
+            .translation_subtitle_split
+            .set(preferences.translation_subtitle_split);
+        shared
+            .translation_overlay_opacity
+            .set(preferences.translation_overlay_opacity);
+        shared
+            .translation_font_size_preset
+            .set(preferences.translation_font_size_preset.clone());
+        shared.translation_footer_font_size_preset.set("12".into());
+        shared
             .translation_anchor_position_preset
-            .read_if_dirty()
-        {
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_anchor_position_preset(cx, &preset);
-            };
+            .set(preferences.translation_anchor_position_preset.clone());
+        if preferences.translation_input_device == "__system_audio__" {
+            shared
+                .translation_audio_source
+                .set(AudioSource::SystemAudio);
+            shared.translation_input_device.set(None);
+        } else {
+            shared.translation_audio_source.set(AudioSource::Microphone);
+            let device = (preferences.translation_input_device != "__default_microphone__")
+                .then(|| preferences.translation_input_device.clone());
+            shared.translation_input_device.set(device);
         }
+    }
 
-        if let Some(split) = dora_state.translation_subtitle_split.read_if_dirty() {
-            let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-            if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-                overlay.set_split_view(cx, split);
-            };
+    fn sample_text(language: &str, index: usize) -> &'static str {
+        match (language, index) {
+            ("zh", 0) => "这是一段用于调整字幕大小和布局的测试内容。",
+            ("zh", _) => "请确认每句话都清晰、易读，并适合现场屏幕。",
+            ("ja", 0) => "これは字幕のサイズとレイアウトを調整するためのテストです。",
+            ("ja", _) => "各文が読みやすく、会場の画面に適しているか確認してください。",
+            ("fr", 0) => {
+                "Ceci est un texte de test pour régler la taille et la disposition des sous-titres."
+            }
+            ("fr", _) => {
+                "Vérifiez que chaque phrase est claire et lisible sur l’écran de la salle."
+            }
+            (_, 0) => "This sample helps you adjust subtitle size and layout.",
+            (_, _) => {
+                "Check that every sentence is clear, readable, and suitable for the venue screen."
+            }
         }
+    }
 
-        // ── Translation overlay status heartbeat (idle/warming/listening) ─────
-        if self.translation_overlay_visible {
-            let active = dora_state.translation_overlay_active.read();
-            let status_snapshot = dora_state.status.read();
-            let bridges_ready = status_snapshot
+    fn show_subtitle_preview(&self, settings: &TranslationSettings) {
+        let history = (0..2)
+            .map(|index| SentenceUnit {
+                source_text: Self::sample_text(&settings.source_language, index).to_string(),
+                translation: if settings.target_language == "none" {
+                    String::new()
+                } else {
+                    Self::sample_text(&settings.target_language, index).to_string()
+                },
+            })
+            .collect();
+        self.runtime
+            .shared_state()
+            .translation
+            .set(Some(TranslationUpdate {
+                history,
+                pending_source_text: String::new(),
+            }));
+        *self.subtitle_preview_visible.lock() = true;
+    }
+
+    fn clear_subtitle_preview(&self) {
+        self.runtime.shared_state().translation.set(None);
+        *self.subtitle_preview_visible.lock() = false;
+    }
+
+    fn overlay_state(&self) -> OverlayState {
+        let shared = self.runtime.shared_state();
+        let active = shared.translation_overlay_active.read();
+        let bridge_status = shared.status.read();
+        let bridges_ready = bridge_status
+            .active_bridges
+            .iter()
+            .any(|bridge| bridge == "moxin-mic-input")
+            && bridge_status
                 .active_bridges
                 .iter()
-                .any(|b| b == "moxin-mic-input")
-                && status_snapshot
-                    .active_bridges
-                    .iter()
-                    .any(|b| b == "moxin-translation-listener");
-
-            let new_status = if !active {
-                "idle"
-            } else if bridges_ready {
-                "listening"
-            } else {
-                "warming"
-            };
-            // Set unconditionally; DirtyValue collapses redundant writes for the
-            // consumer side (read_if_dirty), and screen.rs guards on actual change.
-            dora_state
-                .translation_overlay_status
-                .set(new_status.to_string());
+                .any(|bridge| bridge == "moxin-translation-listener");
+        let status = if !active {
+            "idle"
+        } else if bridges_ready {
+            "listening"
+        } else {
+            "warming"
+        }
+        .to_string();
+        if shared.translation_overlay_status.read() != status {
+            shared.translation_overlay_status.set(status.clone());
         }
 
-        let status = dora_state.translation_overlay_status.read();
-        let overlay_ref = self.translation_ui.widget(ids!(body.translation_overlay));
-        if let Some(mut overlay) = overlay_ref.borrow_mut::<TranslationOverlay>() {
-            overlay.set_status(cx, &status);
-        };
+        let (source_language, target_language) = shared.translation_lang_pair.read();
+        let update = shared.translation.read();
+        let (history, pending_source_text) = update
+            .map(|update| {
+                (
+                    update
+                        .history
+                        .into_iter()
+                        .map(|sentence| Sentence {
+                            source_text: sentence.source_text,
+                            translation: sentence.translation,
+                        })
+                        .collect(),
+                    update.pending_source_text,
+                )
+            })
+            .unwrap_or_default();
 
-        // ── Translation overlay opacity ──────────────────────────────────────
-        let opacity = dora_state.translation_overlay_opacity.read();
-        if (opacity - self.last_overlay_opacity).abs() > 0.001 {
-            self.last_overlay_opacity = opacity;
-            // On macOS: use NSWindow.setAlphaValue to composite the entire window
-            // at the given opacity against the screen — no Makepad patches needed.
-            #[cfg(target_os = "macos")]
-            unsafe {
-                set_nswindow_alpha("Translation", opacity);
-            }
+        OverlayState {
+            active,
+            status,
+            source_language,
+            target_language,
+            subtitle_split: shared.translation_subtitle_split.read(),
+            font_size: shared
+                .translation_font_size_preset
+                .read()
+                .parse()
+                .unwrap_or(24),
+            anchor_position: shared
+                .translation_anchor_position_preset
+                .read()
+                .parse()
+                .unwrap_or(50),
+            history,
+            pending_source_text,
         }
     }
 
-    fn handle_shutdown(&mut self, _cx: &mut Cx) {
-        ::log::info!("Hen Local Translator application shutting down");
-        self.ui.ttsscreen(ids!(body.tts_screen)).shutdown_cleanup();
+    fn poll_runtime_events(&self) -> RuntimeState {
+        let events = self.runtime.poll_events();
+        let mut state = self.runtime_state.lock();
+        for event in events {
+            match event {
+                RuntimeEvent::Started(id) => {
+                    state.running = true;
+                    state.status = "listening".into();
+                    state.message = format!("Local translation connected · {id}");
+                }
+                RuntimeEvent::Stopped => {
+                    state.running = false;
+                    state.status = "idle".into();
+                    state.message = "Translation stopped".into();
+                }
+                RuntimeEvent::Error(message) => {
+                    state.running = false;
+                    state.status = "error".into();
+                    state.message = message;
+                }
+            }
+        }
+        state.clone()
+    }
+
+    fn save_transcript_if_needed(&self) -> Result<(), String> {
+        let preferences = self.preferences.lock().clone();
+        if !preferences.translation_auto_save_transcript
+            && !preferences.translation_periodic_save_transcript
+        {
+            return Ok(());
+        }
+        let Some(update) = self.runtime.shared_state().translation.read() else {
+            return Ok(());
+        };
+        if update.history.is_empty() {
+            return Ok(());
+        }
+
+        let directory = preferences::transcript_dir(&preferences);
+        fs::create_dir_all(&directory)
+            .map_err(|error| format!("Could not create transcript directory: {error}"))?;
+        let filename = if preferences
+            .translation_transcript_file_name
+            .trim()
+            .is_empty()
+        {
+            "transcript.md"
+        } else {
+            preferences.translation_transcript_file_name.trim()
+        };
+        let mut markdown = String::from("# Translation transcript\n\n");
+        for sentence in update.history {
+            markdown.push_str(&format!(
+                "**Source**\n\n{}\n\n**Translation**\n\n{}\n\n---\n\n",
+                sentence.source_text, sentence.translation
+            ));
+        }
+        fs::write(directory.join(filename), markdown)
+            .map_err(|error| format!("Could not save transcript: {error}"))
     }
 }
 
-impl App {
-    fn should_intercept_main_window_close(
-        window_id: Option<WindowId>,
-        main_window_id: Option<WindowId>,
-    ) -> bool {
-        matches!((window_id, main_window_id), (Some(window_id), Some(main_window_id)) if window_id == main_window_id)
+#[tauri::command]
+fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
+    let preferences = state.preferences.lock().clone();
+    let runtime_state = state.poll_runtime_events();
+    SettingsPayload {
+        settings: TranslationSettings::from(&preferences),
+        input_devices: input_devices(),
+        output_devices: output_devices(),
+        subtitle_preview_visible: *state.subtitle_preview_visible.lock(),
+        running: runtime_state.running,
+        runtime_status: runtime_state.status,
+        runtime_message: runtime_state.message,
+    }
+}
+
+#[tauri::command]
+fn update_settings(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    settings: TranslationSettings,
+) -> Result<(), String> {
+    let overlay_mode_changed = {
+        let mut preferences = state.preferences.lock();
+        let changed = preferences.translation_overlay_fullscreen != settings.overlay_fullscreen;
+        settings.apply_to(&mut preferences);
+        preferences::save(&preferences)?;
+        changed
+    };
+    state.sync_shared_state();
+    apply_overlay_window(&app, &settings, overlay_mode_changed)?;
+    if *state.subtitle_preview_visible.lock() {
+        state.show_subtitle_preview(&settings);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn start_translation(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    settings: TranslationSettings,
+) -> Result<RuntimeState, String> {
+    {
+        let mut preferences = state.preferences.lock();
+        settings.apply_to(&mut preferences);
+        preferences::save(&preferences)?;
+    }
+    state.sync_shared_state();
+
+    let dataflow = render_translation_dataflow(
+        state.resource_dir.as_deref(),
+        RenderOptions {
+            source_language: &settings.source_language,
+            target_language: &settings.target_language,
+            system_audio: settings.input_device == "__system_audio__",
+            spoken_translation: settings.spoken_translation_enabled,
+            spoken_voice: settings
+                .spoken_translation_voice
+                .as_deref()
+                .unwrap_or("vivian"),
+        },
+    )?;
+
+    state.clear_subtitle_preview();
+    let shared = state.runtime.shared_state();
+    shared.translation.set(None);
+    shared.translation_window_visible.set(true);
+    shared.translation_overlay_active.set(true);
+    shared.translation_overlay_status.set("warming".into());
+    state.runtime.start(dataflow)?;
+    apply_overlay_window(&app, &settings, false)?;
+    if let Some(window) = app.get_webview_window("overlay") {
+        window.show().map_err(|error| error.to_string())?;
     }
 
-    fn should_redirect_overlay_focus(
-        focused_window_id: Option<WindowId>,
-        translation_window_id: Option<WindowId>,
-        main_window_id: Option<WindowId>,
-        translation_overlay_visible: bool,
-    ) -> bool {
-        matches!(
-            (focused_window_id, translation_window_id, main_window_id, translation_overlay_visible),
-            (Some(focused_window_id), Some(translation_window_id), Some(_), false)
-                if focused_window_id == translation_window_id
-        )
+    let next = RuntimeState {
+        running: true,
+        status: "warming".into(),
+        message: "Starting local translation…".into(),
+    };
+    *state.runtime_state.lock() = next.clone();
+    Ok(next)
+}
+
+#[tauri::command]
+fn stop_translation(state: State<'_, AppState>) -> Result<RuntimeState, String> {
+    state.save_transcript_if_needed()?;
+    state.runtime.stop()?;
+    let shared = state.runtime.shared_state();
+    shared.translation.set(None);
+    shared.translation_window_visible.set(true);
+    shared.translation_overlay_active.set(false);
+    shared.translation_overlay_status.set("idle".into());
+    *state.subtitle_preview_visible.lock() = false;
+
+    let next = RuntimeState {
+        running: false,
+        status: "idle".into(),
+        message: "Translation stopped".into(),
+    };
+    *state.runtime_state.lock() = next.clone();
+    Ok(next)
+}
+
+#[tauri::command]
+fn get_overlay_state(state: State<'_, AppState>) -> OverlayState {
+    state.overlay_state()
+}
+
+#[tauri::command]
+fn open_transcript_history(state: State<'_, AppState>) -> Result<(), String> {
+    let directory = preferences::transcript_dir(&state.preferences.lock());
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("Could not create transcript directory: {error}"))?;
+    open_directory(&directory)
+}
+
+#[tauri::command]
+fn toggle_subtitle_preview(state: State<'_, AppState>) -> Result<bool, String> {
+    if state.runtime_state.lock().running {
+        return Err("Stop live translation before changing the test subtitles".into());
     }
 
-    fn is_translation_window_geom(geom: &WindowGeom) -> bool {
-        let w = geom.inner_size.x;
-        let h = geom.inner_size.y;
-        (w - 600.0).abs() < 2.0 && (h - 260.0).abs() < 2.0
+    let next = !*state.subtitle_preview_visible.lock();
+    if next {
+        let preferences = state.preferences.lock();
+        let settings = TranslationSettings::from(&*preferences);
+        drop(preferences);
+        state.show_subtitle_preview(&settings);
+    } else {
+        state.clear_subtitle_preview();
     }
+    Ok(next)
+}
+
+const PREVIEW_VOICES: &[&str] = &[
+    "vivian", "serena", "baiyang", "yangyang", "ryan", "aiden", "maple", "juniper",
+];
+
+fn voice_preview_path(state: &AppState, voice: &str) -> Result<PathBuf, String> {
+    let voice = voice.trim().to_lowercase();
+    if !PREVIEW_VOICES.contains(&voice.as_str()) {
+        return Err(format!("Unsupported voice preview: {voice}"));
+    }
+    let filename = format!("{voice}.wav");
+    let mut candidates = Vec::new();
+
+    if let Ok(resource_root) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
+        candidates.push(
+            PathBuf::from(resource_root)
+                .join("qwen3-previews")
+                .join(&filename),
+        );
+    }
+    if let Some(resource_dir) = state.resource_dir.as_deref() {
+        candidates.push(resource_dir.join("qwen3-previews").join(&filename));
+        candidates.push(
+            resource_dir
+                .join("_up_")
+                .join("node-hub")
+                .join("dora-qwen3-tts-mlx")
+                .join("previews")
+                .join(&filename),
+        );
+    }
+    if let Ok(model_root) = std::env::var("QWEN3_TTS_MODEL_ROOT") {
+        candidates.push(PathBuf::from(model_root).join("previews").join(&filename));
+    }
+    if let Some(home) = dirs::home_dir() {
+        candidates.push(
+            home.join(".OminiX")
+                .join("models")
+                .join("qwen3-tts-mlx")
+                .join("previews")
+                .join(&filename),
+        );
+    }
+    candidates.push(
+        PathBuf::from("node-hub")
+            .join("dora-qwen3-tts-mlx")
+            .join("previews")
+            .join(&filename),
+    );
+
+    if matches!(voice.as_str(), "baiyang" | "yangyang" | "maple" | "juniper") {
+        if let Ok(resource_root) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
+            candidates.push(
+                PathBuf::from(resource_root)
+                    .join("qwen3-voices")
+                    .join(&voice)
+                    .join("ref.wav"),
+            );
+        }
+        if let Some(resource_dir) = state.resource_dir.as_deref() {
+            candidates.push(
+                resource_dir
+                    .join("qwen3-voices")
+                    .join(&voice)
+                    .join("ref.wav"),
+            );
+            candidates.push(
+                resource_dir
+                    .join("_up_")
+                    .join("node-hub")
+                    .join("dora-qwen3-tts-mlx")
+                    .join("voices")
+                    .join(&voice)
+                    .join("ref.wav"),
+            );
+        }
+        if let Some(home) = dirs::home_dir() {
+            candidates.push(
+                home.join(".OminiX")
+                    .join("models")
+                    .join("qwen3-tts-mlx")
+                    .join("voices")
+                    .join(&voice)
+                    .join("ref.wav"),
+            );
+        }
+        candidates.push(
+            PathBuf::from("node-hub")
+                .join("dora-qwen3-tts-mlx")
+                .join("voices")
+                .join(&voice)
+                .join("ref.wav"),
+        );
+    }
+
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .ok_or_else(|| format!("Voice preview audio is not installed for {voice}"))
+}
+
+fn stop_preview_process(state: &AppState) {
+    if let Some(mut child) = state.voice_preview_process.lock().take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+#[tauri::command]
+fn preview_spoken_voice(state: State<'_, AppState>, voice: String) -> Result<(), String> {
+    let path = voice_preview_path(&state, &voice)?;
+    stop_preview_process(&state);
+
+    #[cfg(target_os = "macos")]
+    let child = Command::new("/usr/bin/afplay")
+        .arg(&path)
+        .spawn()
+        .map_err(|error| format!("Could not play voice preview: {error}"))?;
+
+    #[cfg(not(target_os = "macos"))]
+    let child = Command::new("aplay")
+        .arg(&path)
+        .spawn()
+        .map_err(|error| format!("Could not play voice preview: {error}"))?;
+
+    *state.voice_preview_process.lock() = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_spoken_voice_preview(state: State<'_, AppState>) {
+    stop_preview_process(&state);
+}
+
+fn input_devices() -> Vec<String> {
+    let mut devices = vec!["__system_audio__".into(), "__default_microphone__".into()];
+    if let Ok(discovered) = cpal::default_host().input_devices() {
+        devices.extend(discovered.filter_map(|device| device.name().ok()));
+    }
+    devices.sort_by(|left, right| {
+        let rank = |value: &str| match value {
+            "__system_audio__" => 0,
+            "__default_microphone__" => 1,
+            _ => 2,
+        };
+        rank(left).cmp(&rank(right)).then_with(|| left.cmp(right))
+    });
+    devices.dedup();
+    devices
+}
+
+fn output_devices() -> Vec<String> {
+    let mut devices: Vec<String> = cpal::default_host()
+        .output_devices()
+        .map(|devices| devices.filter_map(|device| device.name().ok()).collect())
+        .unwrap_or_default();
+    devices.sort();
+    devices.dedup();
+    devices
+}
+
+fn create_overlay(app: &tauri::App) -> tauri::Result<WebviewWindow> {
+    let overlay = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
+        .title("Hen Local Translator — Translation")
+        .inner_size(960.0, 640.0)
+        .min_inner_size(560.0, 260.0)
+        .resizable(true)
+        .decorations(false)
+        .always_on_top(true)
+        .visible(true)
+        .center()
+        .build()?;
+
+    let app_handle = app.handle().clone();
+    overlay.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event {
+            api.prevent_close();
+            let state = app_handle.state::<AppState>();
+            state
+                .runtime
+                .shared_state()
+                .translation_window_visible
+                .set(true);
+        }
+    });
+    Ok(overlay)
+}
+
+fn apply_overlay_window(
+    app: &tauri::AppHandle,
+    settings: &TranslationSettings,
+    resize_for_mode: bool,
+) -> Result<(), String> {
+    let Some(window) = app.get_webview_window("overlay") else {
+        return Ok(());
+    };
+    if resize_for_mode {
+        let size = if settings.overlay_fullscreen {
+            LogicalSize::new(960.0, 640.0)
+        } else {
+            LogicalSize::new(680.0, 340.0)
+        };
+        window
+            .set_size(Size::Logical(size))
+            .map_err(|error| error.to_string())?;
+    }
+    set_window_opacity(&window, settings.overlay_opacity)
+}
+
+#[cfg(target_os = "macos")]
+fn set_window_opacity(window: &WebviewWindow, opacity: f64) -> Result<(), String> {
+    use objc2::{msg_send, runtime::AnyObject};
+    let ns_window = window.ns_window().map_err(|error| error.to_string())? as *mut AnyObject;
+    unsafe {
+        let _: () = msg_send![ns_window, setAlphaValue: opacity.clamp(0.35, 1.0)];
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_window_opacity(_window: &WebviewWindow, _opacity: f64) -> Result<(), String> {
+    Ok(())
+}
+
+fn open_directory(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("explorer");
+        command
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = Command::new("xdg-open");
+
+    command
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open transcript history: {error}"))
+}
+
+fn start_event_bridge(app_handle: tauri::AppHandle) {
+    thread::spawn(move || loop {
+        if app_handle.get_webview_window("main").is_none() {
+            break;
+        }
+        let state = app_handle.state::<AppState>();
+        let runtime_state = state.poll_runtime_events();
+        let overlay_state = state.overlay_state();
+        let _ = app_handle.emit_to("main", "runtime-state", &runtime_state);
+        let _ = app_handle.emit_to("overlay", "overlay-state", &overlay_state);
+        thread::sleep(Duration::from_millis(80));
+    });
+}
+
+pub fn run(args: Args) {
+    let cli_dataflow = args.dataflow.clone();
+    tauri::Builder::default()
+        .setup(move |app| {
+            let resource_dir = app.path().resource_dir().ok();
+            app.manage(AppState::new(resource_dir));
+            create_overlay(app)?;
+            let initial_settings = {
+                let state = app.state::<AppState>();
+                let preferences = state.preferences.lock();
+                TranslationSettings::from(&*preferences)
+            };
+            apply_overlay_window(app.handle(), &initial_settings, true)
+                .map_err(anyhow::Error::msg)?;
+
+            if let Some(dataflow) = cli_dataflow.clone() {
+                let state = app.state::<AppState>();
+                state
+                    .runtime
+                    .start(dataflow.into())
+                    .map_err(|error| anyhow::anyhow!(error))?;
+            }
+            start_event_bridge(app.handle().clone());
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            get_settings,
+            update_settings,
+            start_translation,
+            stop_translation,
+            get_overlay_state,
+            open_transcript_history,
+            toggle_subtitle_preview,
+            preview_spoken_voice,
+            stop_spoken_voice_preview
+        ])
+        .run(tauri::generate_context!())
+        .expect("failed to run Hen Local Translator");
 }
 
 #[cfg(test)]
 mod tests {
-    use super::App;
-    use makepad_widgets::WindowId;
+    use super::*;
 
     #[test]
-    fn main_window_close_is_intercepted_when_main_window_is_known() {
-        let window_id = WindowId(1, 1);
-        assert!(App::should_intercept_main_window_close(
-            Some(window_id),
-            Some(window_id)
-        ));
-        assert!(!App::should_intercept_main_window_close(
-            Some(WindowId(2, 1)),
-            Some(window_id)
-        ));
-    }
-
-    #[test]
-    fn hidden_overlay_focus_is_redirected_back_to_main_window() {
-        let main_window_id = WindowId(1, 1);
-        let overlay_window_id = WindowId(2, 1);
-        assert!(App::should_redirect_overlay_focus(
-            Some(overlay_window_id),
-            Some(overlay_window_id),
-            Some(main_window_id),
-            false
-        ));
-        assert!(!App::should_redirect_overlay_focus(
-            Some(overlay_window_id),
-            Some(overlay_window_id),
-            Some(main_window_id),
-            true
-        ));
+    fn settings_round_trip_preserves_translation_preferences() {
+        let original = AppPreferences::default();
+        let settings = TranslationSettings::from(&original);
+        let mut updated = AppPreferences::default();
+        settings.apply_to(&mut updated);
+        assert_eq!(
+            original.translation_source_language,
+            updated.translation_source_language
+        );
+        assert_eq!(
+            original.translation_target_language,
+            updated.translation_target_language
+        );
+        assert_eq!(
+            original.translation_input_device,
+            updated.translation_input_device
+        );
     }
 }
-
-// ============================================================================
-// APP ENTRY POINT
-// ============================================================================
-
-app_main!(App);

@@ -3,6 +3,9 @@
 //! A standalone desktop application for real-time speech translation.
 
 mod app;
+mod dataflow;
+mod preferences;
+mod runtime;
 
 use clap::Parser;
 
@@ -45,9 +48,5 @@ fn main() {
         log::info!("Using dataflow: {}", dataflow);
     }
 
-    // Store args for app access
-    app::set_cli_args(args);
-
-    // Start the application
-    app::app_main();
+    app::run(args);
 }

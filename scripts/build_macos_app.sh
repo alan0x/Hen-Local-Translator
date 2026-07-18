@@ -20,6 +20,16 @@ PROFILE="release"
 ICON_PATH=""
 OUT_DIR="$ROOT_DIR/dist"
 VERSION="$WORKSPACE_VERSION"
+BUILD_TARGET_DIR="${HEN_LOCAL_CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/hen-local-translator-cargo-target}"
+
+if [[ "$BUILD_TARGET_DIR" == *" "* ]]; then
+  echo "Cargo target directory cannot contain spaces: $BUILD_TARGET_DIR"
+  echo "Set HEN_LOCAL_CARGO_TARGET_DIR to a path without spaces."
+  exit 1
+fi
+mkdir -p "$BUILD_TARGET_DIR"
+export CARGO_TARGET_DIR="$BUILD_TARGET_DIR"
+export MOXIN_DORA_TARGET_DIR="$BUILD_TARGET_DIR"
 
 usage() {
   cat <<EOF
@@ -75,22 +85,26 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+echo "Installing and building the Svelte frontend..."
+npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" install
+npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" run build
+
 echo "Building binaries..."
 resolve_mlx_prebuilt_path() {
-  local root_dir="$1"
+  local target_dir="$1"
   local profile="$2"
-  local build_dir="$root_dir/target/$profile/build"
+  local build_dir="$target_dir/$profile/build"
   if [[ -d "$build_dir" ]]; then
     find "$build_dir" -type d -path '*mlx-sys-*/out/mlx-prebuilt' 2>/dev/null | tail -n 1 || true
   fi
 }
 
 run_cargo_build() {
-  local root_dir="$1"
+  local target_dir="$1"
   local profile="$2"
   shift 2
   local mlx_prebuilt_path=""
-  mlx_prebuilt_path="$(resolve_mlx_prebuilt_path "$root_dir" "$profile")"
+  mlx_prebuilt_path="$(resolve_mlx_prebuilt_path "$target_dir" "$profile")"
   if [[ -n "$mlx_prebuilt_path" ]]; then
     MLX_PREBUILT_PATH="$mlx_prebuilt_path" cargo build "$@"
   else
@@ -154,16 +168,16 @@ PY
   rm -rf "$tmp_dir"
 }
 
-MAKEPAD=apple_bundle MAKEPAD_PACKAGE_DIR=makepad run_cargo_build "$ROOT_DIR" "$PROFILE" -p hen-local-translator-shell --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$ROOT_DIR" "$PROFILE" -p dora-qwen3-asr --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$ROOT_DIR" "$PROFILE" -p dora-qwen35-translator --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$ROOT_DIR" "$PROFILE" -p hen-local-init --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p hen-local-translator-shell --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen3-asr --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen35-translator --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p hen-local-init --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 
-SHELL_BIN_PATH="$ROOT_DIR/target/$PROFILE/$BIN_NAME"
-QWEN_ASR_BIN_PATH="$ROOT_DIR/target/$PROFILE/dora-qwen3-asr"
-QWEN35_TRANSLATOR_BIN_PATH="$ROOT_DIR/target/$PROFILE/dora-qwen35-translator"
-MOXIN_INIT_BIN_PATH="$ROOT_DIR/target/$PROFILE/hen-local-init"
-MLX_METALLIB_PATH="$ROOT_DIR/target/$PROFILE/mlx.metallib"
+SHELL_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/$BIN_NAME"
+QWEN_ASR_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/dora-qwen3-asr"
+QWEN35_TRANSLATOR_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/dora-qwen35-translator"
+MOXIN_INIT_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/hen-local-init"
+MLX_METALLIB_PATH="$BUILD_TARGET_DIR/$PROFILE/mlx.metallib"
 DORA_BIN_PATH="$(command -v dora || true)"
 if [[ ! -f "$SHELL_BIN_PATH" ]]; then
   echo "Binary not found: $SHELL_BIN_PATH"
@@ -192,9 +206,12 @@ MACOS_DIR="$CONTENTS_DIR/MacOS"
 RES_DIR="$CONTENTS_DIR/Resources"
 SCRIPTS_DIR="$RES_DIR/scripts"
 DATAFLOW_DIR="$RES_DIR/dataflow"
+QWEN_PREVIEW_DIR="$RES_DIR/qwen3-previews"
+QWEN_VOICE_DIR="$RES_DIR/qwen3-voices"
+QWEN_MODEL_DIR="${QWEN3_TTS_MODEL_ROOT:-$HOME/.OminiX/models/qwen3-tts-mlx}"
 
 rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RES_DIR" "$SCRIPTS_DIR" "$DATAFLOW_DIR"
+mkdir -p "$MACOS_DIR" "$RES_DIR" "$SCRIPTS_DIR" "$DATAFLOW_DIR" "$QWEN_PREVIEW_DIR" "$QWEN_VOICE_DIR"
 
 TRANSLATION_QWEN35_BUNDLE_YAML="$ROOT_DIR/scripts/dataflow/translation_qwen35.bundle.yml"
 if [[ ! -f "$TRANSLATION_QWEN35_BUNDLE_YAML" ]]; then
@@ -220,46 +237,30 @@ chmod +x "$SCRIPTS_DIR/macos_preflight.sh" "$SCRIPTS_DIR/macos_bootstrap.sh" "$S
 
 cp "$TRANSLATION_QWEN35_BUNDLE_YAML" "$DATAFLOW_DIR/translation_qwen35.yml"
 
-# Bundle Makepad live resources for distributable app builds.
-# With MAKEPAD_PACKAGE_DIR=makepad, runtime dependency paths resolve under:
-#   Contents/Resources/makepad/<crate_name>/resources
-MAKEPAD_RES_ROOT="$RES_DIR/makepad"
-mkdir -p "$MAKEPAD_RES_ROOT"
+for preview_voice in vivian serena baiyang yangyang ryan aiden maple juniper; do
+  preview_source="$ROOT_DIR/node-hub/dora-qwen3-tts-mlx/previews/$preview_voice.wav"
+  if [[ ! -f "$preview_source" ]]; then
+    preview_source="$QWEN_MODEL_DIR/previews/$preview_voice.wav"
+  fi
+  if [[ ! -f "$preview_source" ]]; then
+    echo "Voice preview file not found for $preview_voice"
+    exit 1
+  fi
+  cp "$preview_source" "$QWEN_PREVIEW_DIR/$preview_voice.wav"
+done
 
-mkdir -p "$MAKEPAD_RES_ROOT/moxin_widgets"
-cp -R "$ROOT_DIR/moxin-widgets/resources" "$MAKEPAD_RES_ROOT/moxin_widgets/resources"
-
-if [[ -d "$ROOT_DIR/moxin-ui/resources" ]]; then
-  mkdir -p "$MAKEPAD_RES_ROOT/moxin_ui"
-  cp -R "$ROOT_DIR/moxin-ui/resources" "$MAKEPAD_RES_ROOT/moxin_ui/resources"
-fi
-
-MAKEPAD_SRC_DIR="$(find "$HOME/.cargo/git/checkouts" -maxdepth 4 -type d -path "*/makepad-*/*/widgets" 2>/dev/null | head -n 1 | sed 's#/widgets$##')"
-if [[ -n "$MAKEPAD_SRC_DIR" && -d "$MAKEPAD_SRC_DIR/widgets/resources" ]]; then
-  mkdir -p "$MAKEPAD_RES_ROOT/makepad_widgets"
-  cp -R "$MAKEPAD_SRC_DIR/widgets/resources" "$MAKEPAD_RES_ROOT/makepad_widgets/resources"
-
-  if [[ -d "$MAKEPAD_SRC_DIR/widgets/fonts/emoji/resources" ]]; then
-    mkdir -p "$MAKEPAD_RES_ROOT/makepad_fonts_emoji"
-    cp -R "$MAKEPAD_SRC_DIR/widgets/fonts/emoji/resources" "$MAKEPAD_RES_ROOT/makepad_fonts_emoji/resources"
+for bundled_voice in baiyang yangyang maple juniper; do
+  bundled_voice_source="$ROOT_DIR/node-hub/dora-qwen3-tts-mlx/voices/$bundled_voice/ref.wav"
+  if [[ ! -f "$bundled_voice_source" ]]; then
+    bundled_voice_source="$QWEN_MODEL_DIR/voices/$bundled_voice/ref.wav"
   fi
-  if [[ -d "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_regular/resources" ]]; then
-    mkdir -p "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_regular"
-    cp -R "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_regular/resources" "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_regular/resources"
+  if [[ ! -f "$bundled_voice_source" ]]; then
+    echo "Bundled voice reference not found for $bundled_voice"
+    exit 1
   fi
-  if [[ -d "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_regular_2/resources" ]]; then
-    mkdir -p "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_regular_2"
-    cp -R "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_regular_2/resources" "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_regular_2/resources"
-  fi
-  if [[ -d "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_bold/resources" ]]; then
-    mkdir -p "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_bold"
-    cp -R "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_bold/resources" "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_bold/resources"
-  fi
-  if [[ -d "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_bold_2/resources" ]]; then
-    mkdir -p "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_bold_2"
-    cp -R "$MAKEPAD_SRC_DIR/widgets/fonts/chinese_bold_2/resources" "$MAKEPAD_RES_ROOT/makepad_fonts_chinese_bold_2/resources"
-  fi
-fi
+  mkdir -p "$QWEN_VOICE_DIR/$bundled_voice"
+  cp "$bundled_voice_source" "$QWEN_VOICE_DIR/$bundled_voice/ref.wav"
+done
 
 cat > "$MACOS_DIR/$BIN_NAME" <<'EOF'
 #!/usr/bin/env bash

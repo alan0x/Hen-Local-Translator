@@ -1595,6 +1595,189 @@ live_design! {
         }
     }
 
+    // Translation-page controls for the Swiss control-grid visual system.
+    // These stay local to the live-translation surface so the rest of the
+    // application can keep its existing component styling.
+    SwissDeviceDropDown = <SettingsDeviceDropDown> {
+        height: 38
+        padding: {left: 12, right: 32, top: 9, bottom: 9}
+        draw_bg: {
+            instance dark_mode: 0.0
+            border_radius: 0.0
+            border_size: 1.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.rect(0.75, 0.75, self.rect_size.x - 1.5, self.rect_size.y - 1.5);
+                let bg = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.09, 0.10, 0.12, 1.0), self.dark_mode);
+                let bg_disabled = mix(vec4(0.93, 0.93, 0.91, 1.0), vec4(0.14, 0.15, 0.17, 1.0), self.dark_mode);
+                let border = mix(vec4(0.06, 0.065, 0.075, 1.0), vec4(0.82, 0.84, 0.88, 1.0), self.dark_mode);
+                let disabled_border = mix(vec4(0.58, 0.59, 0.60, 1.0), vec4(0.38, 0.40, 0.44, 1.0), self.dark_mode);
+                sdf.fill(mix(bg, bg_disabled, self.disabled));
+                let edge = mix(border, disabled_border, self.disabled);
+                sdf.rect(0., 0., self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                sdf.rect(self.rect_size.x - 1.5, 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                let arrow = mix(vec4(0.04, 0.045, 0.055, 1.0), vec4(0.92, 0.93, 0.96, 1.0), self.dark_mode);
+                let ax = self.rect_size.x - 16.0;
+                let ay = self.rect_size.y * 0.5;
+                sdf.move_to(ax - 4.0, ay - 2.0);
+                sdf.line_to(ax, ay + 2.5);
+                sdf.line_to(ax + 4.0, ay - 2.0);
+                sdf.stroke(arrow, 1.5);
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance dark_mode: 0.0
+            text_style: <FONT_MEDIUM>{ font_size: 12.0 }
+            fn get_color(self) -> vec4 {
+                let normal = mix(vec4(0.045, 0.05, 0.06, 1.0), vec4(0.96, 0.97, 0.99, 1.0), self.dark_mode);
+                let muted = mix(vec4(0.48, 0.49, 0.51, 1.0), vec4(0.52, 0.54, 0.58, 1.0), self.dark_mode);
+                return mix(normal, muted, self.disabled);
+            }
+        }
+    }
+
+    SwissSegmentGroup = <RoundedView> {
+        width: Fit, height: 38
+        flow: Right
+        spacing: 0
+        padding: 0
+        align: {y: 0.5}
+        show_bg: true
+        draw_bg: {
+            instance dark_mode: 0.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.rect(0.75, 0.75, self.rect_size.x - 1.5, self.rect_size.y - 1.5);
+                sdf.fill(mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.09, 0.10, 0.12, 1.0), self.dark_mode));
+                let edge = mix(vec4(0.06, 0.065, 0.075, 1.0), vec4(0.82, 0.84, 0.88, 1.0), self.dark_mode);
+                sdf.rect(0., 0., self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                sdf.rect(self.rect_size.x - 1.5, 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                return sdf.result;
+            }
+        }
+    }
+
+    SwissSegmentBtn = <Button> {
+        width: Fit, height: 38
+        padding: {left: 14, right: 14, top: 0, bottom: 0}
+        margin: 0
+        draw_bg: {
+            instance active: 0.0
+            instance hover: 0.0
+            instance pressed: 0.0
+            instance dark_mode: 0.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.rect(0.75, 0.75, self.rect_size.x - 1.5, self.rect_size.y - 1.5);
+                let idle = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.09, 0.10, 0.12, 1.0), self.dark_mode);
+                let hover = mix(vec4(0.94, 0.95, 0.98, 1.0), vec4(0.15, 0.16, 0.20, 1.0), self.dark_mode);
+                let pressed = mix(vec4(0.89, 0.91, 0.96, 1.0), vec4(0.20, 0.21, 0.25, 1.0), self.dark_mode);
+                sdf.fill(mix(mix(idle, hover, self.hover), pressed, self.pressed));
+                let edge = mix(vec4(0.06, 0.065, 0.075, 1.0), vec4(0.82, 0.84, 0.88, 1.0), self.dark_mode);
+                sdf.rect(0., 0., self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                sdf.rect(self.rect_size.x - 1.5, 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                if self.active > 0.5 {
+                    sdf.rect(0., self.rect_size.y - 3.0, self.rect_size.x, 3.0);
+                    sdf.fill(vec4(0.02, 0.19, 0.95, 1.0));
+                }
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance active: 0.0
+            instance dark_mode: 0.0
+            text_style: <FONT_SEMIBOLD>{ font_size: 11.5 }
+            fn get_color(self) -> vec4 {
+                let normal = mix(vec4(0.08, 0.085, 0.095, 1.0), vec4(0.86, 0.88, 0.92, 1.0), self.dark_mode);
+                return mix(normal, vec4(0.02, 0.19, 0.95, 1.0), self.active);
+            }
+        }
+    }
+
+    SwissIconBtn = <Button> {
+        width: 38, height: 38
+        padding: 0
+        margin: 0
+        draw_bg: {
+            instance hover: 0.0
+            instance pressed: 0.0
+            instance dark_mode: 0.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.rect(0.75, 0.75, self.rect_size.x - 1.5, self.rect_size.y - 1.5);
+                let base = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.09, 0.10, 0.12, 1.0), self.dark_mode);
+                let hover = mix(vec4(0.91, 0.93, 0.98, 1.0), vec4(0.17, 0.18, 0.22, 1.0), self.dark_mode);
+                let pressed = mix(vec4(0.83, 0.87, 0.96, 1.0), vec4(0.23, 0.24, 0.29, 1.0), self.dark_mode);
+                sdf.fill(mix(mix(base, hover, self.hover), pressed, self.pressed));
+                let edge = mix(vec4(0.06, 0.065, 0.075, 1.0), vec4(0.82, 0.84, 0.88, 1.0), self.dark_mode);
+                sdf.rect(0., 0., self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                sdf.rect(self.rect_size.x - 1.5, 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance dark_mode: 0.0
+            text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
+            fn get_color(self) -> vec4 {
+                return mix(vec4(0.04, 0.045, 0.055, 1.0), vec4(0.94, 0.95, 0.98, 1.0), self.dark_mode);
+            }
+        }
+    }
+
+    SwissActionBtn = <Button> {
+        width: Fit, height: 38
+        padding: {left: 14, right: 14, top: 0, bottom: 0}
+        margin: 0
+        draw_bg: {
+            instance hover: 0.0
+            instance pressed: 0.0
+            instance active: 0.0
+            instance dark_mode: 0.0
+            fn pixel(self) -> vec4 {
+                let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                sdf.rect(0.75, 0.75, self.rect_size.x - 1.5, self.rect_size.y - 1.5);
+                let base = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.09, 0.10, 0.12, 1.0), self.dark_mode);
+                let hover = mix(vec4(0.93, 0.94, 0.97, 1.0), vec4(0.16, 0.17, 0.21, 1.0), self.dark_mode);
+                let pressed = mix(vec4(0.87, 0.89, 0.94, 1.0), vec4(0.22, 0.23, 0.27, 1.0), self.dark_mode);
+                sdf.fill(mix(mix(base, hover, self.hover), pressed, self.pressed));
+                let edge = mix(vec4(0.06, 0.065, 0.075, 1.0), vec4(0.82, 0.84, 0.88, 1.0), self.dark_mode);
+                sdf.rect(0., 0., self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5); sdf.fill(edge);
+                sdf.rect(0., 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                sdf.rect(self.rect_size.x - 1.5, 0., 1.5, self.rect_size.y); sdf.fill(edge);
+                return sdf.result;
+            }
+        }
+        draw_text: {
+            instance dark_mode: 0.0
+            text_style: <FONT_SEMIBOLD>{ font_size: 11.0 }
+            fn get_color(self) -> vec4 {
+                return mix(vec4(0.055, 0.06, 0.07, 1.0), vec4(0.94, 0.95, 0.98, 1.0), self.dark_mode);
+            }
+        }
+    }
+
+    SwissSwapBtn = <SwissIconBtn> {
+        width: 42, height: 38
+        text: "⇄"
+        draw_text: {
+            instance dark_mode: 0.0
+            text_style: <FONT_SEMIBOLD>{ font_size: 18.0 }
+            fn get_color(self) -> vec4 {
+                return mix(vec4(0.02, 0.19, 0.95, 1.0), vec4(0.30, 0.48, 1.0, 1.0), self.dark_mode);
+            }
+        }
+    }
+
     SettingsTextInput = <TextInput> {
         width: Fill, height: 38
         padding: {left: 12, right: 12, top: 9, bottom: 9}
@@ -2134,8 +2317,7 @@ live_design! {
                 draw_bg: {
                     instance dark_mode: 0.0
                     fn pixel(self) -> vec4 {
-                        // Moxin.tts style: light gray background
-                        return mix((MOXIN_BG_PRIMARY), (MOXIN_BG_PRIMARY_DARK), self.dark_mode);
+                        return mix(vec4(1.0, 1.0, 1.0, 1.0), (MOXIN_BG_PRIMARY_DARK), self.dark_mode);
                     }
                 }
 
@@ -6758,19 +6940,52 @@ live_design! {
                         flow: Down
                         spacing: 0
                         visible: true
+                        show_bg: true
+                        draw_bg: {
+                            instance dark_mode: 0.0
+                            fn pixel(self) -> vec4 {
+                                return mix(vec4(1.0, 1.0, 1.0, 1.0), vec4(0.055, 0.06, 0.07, 1.0), self.dark_mode);
+                            }
+                        }
 
                         // Page header
                         page_header = <View> {
-                            width: Fill, height: Fit
+                            width: Fill, height: 64
                             flow: Right
                             align: {y: 0.5}
-                            padding: {bottom: 20}
+                            padding: {left: 2, right: 2, bottom: 10}
+                            show_bg: true
+                            draw_bg: {
+                                instance dark_mode: 0.0
+                                fn pixel(self) -> vec4 {
+                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                    sdf.rect(0., 0., self.rect_size.x, self.rect_size.y);
+                                    sdf.fill(mix(vec4(1.0, 1.0, 1.0, 1.0), vec4(0.055, 0.06, 0.07, 1.0), self.dark_mode));
+                                    sdf.rect(0., self.rect_size.y - 1.0, self.rect_size.x, 1.0);
+                                    sdf.fill(mix(vec4(0.08, 0.085, 0.095, 1.0), vec4(0.70, 0.72, 0.76, 1.0), self.dark_mode));
+                                    return sdf.result;
+                                }
+                            }
 
-                            page_logo = <Image> {
+                            page_logo = <View> {
                                 width: 36, height: 36
-                                margin: {right: 12}
-                                source: dep("crate://moxin-widgets/resources/hen_local_icon.png")
-                                fit: Smallest
+                                margin: {right: 14}
+                                show_bg: true
+                                draw_bg: {
+                                    instance dark_mode: 0.0
+                                    fn pixel(self) -> vec4 {
+                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                        let ink = mix(vec4(0.045, 0.05, 0.06, 1.0), vec4(0.94, 0.95, 0.97, 1.0), self.dark_mode);
+                                        sdf.rect(1., 1., self.rect_size.x - 2., self.rect_size.y - 2.);
+                                        sdf.stroke(ink, 1.5);
+                                        sdf.move_to(1., 1.);
+                                        sdf.line_to(self.rect_size.x - 1., self.rect_size.y - 1.);
+                                        sdf.move_to(self.rect_size.x - 1., 1.);
+                                        sdf.line_to(1., self.rect_size.y - 1.);
+                                        sdf.stroke(ink, 1.0);
+                                        return sdf.result;
+                                    }
+                                }
                             }
 
                             page_title_stack = <View> {
@@ -6783,9 +6998,9 @@ live_design! {
                                     padding: {left: 0, right: 0, top: 0, bottom: 0}
                                     draw_text: {
                                         instance dark_mode: 0.0
-                                        text_style: <FONT_SEMIBOLD>{ font_size: 20.0 }
+                                        text_style: <FONT_BOLD>{ font_size: 17.0 }
                                         fn get_color(self) -> vec4 {
-                                            return mix((MOXIN_TEXT_PRIMARY), (TEXT_PRIMARY_DARK), self.dark_mode);
+                                            return mix(vec4(0.045, 0.05, 0.06, 1.0), vec4(0.96, 0.97, 0.99, 1.0), self.dark_mode);
                                         }
                                     }
                                     text: "Hen Local Translator"
@@ -6796,9 +7011,9 @@ live_design! {
                                     padding: {left: 0, right: 0, top: 0, bottom: 0}
                                     draw_text: {
                                         instance dark_mode: 0.0
-                                        text_style: <FONT_REGULAR>{ font_size: 11.0 }
+                                        text_style: <FONT_MEDIUM>{ font_size: 9.5 }
                                         fn get_color(self) -> vec4 {
-                                            return mix((MOXIN_TEXT_MUTED), (MOXIN_TEXT_MUTED_DARK), self.dark_mode);
+                                            return mix(vec4(0.34, 0.35, 0.37, 1.0), vec4(0.66, 0.68, 0.72, 1.0), self.dark_mode);
                                         }
                                     }
                                     text: "Fully offline live translation · Private by design"
@@ -6811,16 +7026,16 @@ live_design! {
                                 flow: Right
                                 spacing: 6
                                 align: {y: 0.5}
-                                padding: {left: 10, right: 10, top: 4, bottom: 4}
+                                padding: {left: 9, right: 9, top: 3, bottom: 3}
                                 visible: false
                                 show_bg: true
                                 draw_bg: {
                                     instance dark_mode: 0.0
-                                    instance border_radius: 12.0
                                     fn pixel(self) -> vec4 {
                                         let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                        sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                        sdf.fill(mix(vec4(0.098, 0.725, 0.506, 0.15), vec4(0.098, 0.725, 0.506, 0.22), self.dark_mode));
+                                        sdf.rect(0., 0., self.rect_size.x, self.rect_size.y);
+                                        sdf.fill(mix(vec4(0.972, 0.974, 0.976, 1.0), vec4(0.08, 0.09, 0.11, 1.0), self.dark_mode));
+                                        sdf.stroke(mix(vec4(0.06, 0.065, 0.075, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode), 1.0);
                                         return sdf.result;
                                     }
                                 }
@@ -6859,36 +7074,15 @@ live_design! {
                                 spacing: 12
                                 margin: {left: 20}
 
-                                open_transcript_history_btn = <SettingsActionBtn> {
+                                open_transcript_history_btn = <SwissActionBtn> {
                                     width: Fit, height: 34
                                     padding: {left: 12, right: 12}
                                     text: "Open Transcript History"
                                 }
 
-                                translation_language_controls = <ToolbarSegmentGroup> {
-
-                                    quick_lang_en_btn = <ToolbarSegmentBtn> {
-                                        width: 46
-                                        text: "EN"
-                                    }
-
-                                    quick_lang_zh_btn = <ToolbarSegmentBtn> {
-                                        width: 50
-                                        text: "中文"
-                                    }
-                                }
-
-                                translation_theme_controls = <ToolbarSegmentGroup> {
-
-                                    quick_theme_light_btn = <ToolbarSegmentBtn> {
-                                        width: 58
-                                        text: "Light"
-                                    }
-
-                                    quick_theme_dark_btn = <ToolbarSegmentBtn> {
-                                        width: 54
-                                        text: "Dark"
-                                    }
+                                translation_settings_btn = <SwissActionBtn> {
+                                    width: 72, height: 34
+                                    text: "SETTINGS"
                                 }
                             }
                         }
@@ -6898,14 +7092,14 @@ live_design! {
                         translation_body = <View> {
                             width: Fill, height: Fill
                             flow: Down
-                            spacing: 14
+                            spacing: 8
                             align: {x: 0.5}
 
                             // ── 设置面板（启停期间始终可见）──────────────────
                             translation_settings_panel = <ScrollYView> {
-                                width: Fill, height: Fill
+                                width: Fill, height: Fit
                                 flow: Down
-                                spacing: 12
+                                spacing: 6
                                 visible: true
                                 scroll_bars: <ScrollBars> {
                                     show_scroll_x: false
@@ -6920,20 +7114,19 @@ live_design! {
                                 // ── 设置卡片组 ──────────────────────────────────
                                 settings_card = <RoundedView> {
                                     width: Fill, height: Fit
-                                    flow: Right
-                                    spacing: 20
-                                    padding: 18
+                                    flow: Down
+                                    spacing: 0
+                                    padding: 0
                                     show_bg: true
                                     draw_bg: {
                                         instance dark_mode: 0.0
-                                        instance border_radius: 10.0
                                         fn pixel(self) -> vec4 {
                                             let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                            sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                            let bg = mix(vec4(0.995, 0.996, 0.999, 1.0), vec4(0.078, 0.082, 0.090, 1.0), self.dark_mode);
-                                            let border = mix(vec4(0.88, 0.90, 0.94, 1.0), vec4(0.18, 0.20, 0.24, 1.0), self.dark_mode);
+                                            sdf.rect(0.75, 0.75, self.rect_size.x - 1.5, self.rect_size.y - 1.5);
+                                            let bg = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.07, 0.075, 0.085, 1.0), self.dark_mode);
+                                            let border = mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode);
                                             sdf.fill(bg);
-                                            sdf.stroke(border, 1.0);
+                                            sdf.stroke(border, 1.5);
                                             return sdf.result;
                                         }
                                     }
@@ -6941,21 +7134,20 @@ live_design! {
                                     route_column = <View> {
                                         width: Fill, height: Fit
                                         flow: Down
-                                        spacing: 10
+                                        spacing: 0
 
                                         section_audio = <View> {
-                                            width: Fill, height: 36
+                                            width: 0, height: 0
                                             flow: Down
-                                            spacing: 2
-                                            align: {y: 0.5}
-                                            padding: {left: 4, right: 4}
+                                            spacing: 0
+                                            padding: 0
 
                                             section_audio_title = <Label> {
                                                 width: Fit, height: Fit
                                                 padding: {top: 0, bottom: 0}
                                                 draw_text: {
                                                     instance dark_mode: 0.0
-                                                    text_style: <FONT_SEMIBOLD>{ font_size: 16.0 }
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
                                                     fn get_color(self) -> vec4 {
                                                         return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                     }
@@ -6965,30 +7157,79 @@ live_design! {
                                         }
 
                                         route_card = <RoundedView> {
-                                            width: Fill, height: 204
+                                            width: Fill, height: 88
                                             flow: Right
-                                            spacing: 12
-                                            padding: 12
+                                            spacing: 0
+                                            padding: 0
+                                            show_bg: true
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 10.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.965, 0.974, 0.987, 1.0), vec4(0.105, 0.132, 0.184, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.22, 0.28, 0.37, 1.0), self.dark_mode);
+                                                    sdf.rect(0., 0., self.rect_size.x, self.rect_size.y);
+                                                    let bg = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.07, 0.075, 0.085, 1.0), self.dark_mode);
+                                                    let border = mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode);
                                                     sdf.fill(bg);
-                                                    sdf.stroke(border, 1.0);
+                                                    sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5);
+                                                    sdf.fill(border);
                                                     return sdf.result;
+                                                }
+                                            }
+
+                                            row_number_audio = <View> {
+                                                width: 72, height: Fill
+                                                align: {x: 0.5, y: 0.5}
+                                                show_bg: true
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        sdf.rect(self.rect_size.x - 1.0, 0., 1.0, self.rect_size.y);
+                                                        sdf.fill(mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode));
+                                                        return sdf.result;
+                                                    }
+                                                }
+                                                row_number_audio_label = <Label> {
+                                                    draw_text: {
+                                                        instance dark_mode: 0.0
+                                                        text_style: <FONT_BOLD>{ font_size: 28.0 }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.035, 0.04, 0.05, 1.0), vec4(0.96, 0.97, 0.99, 1.0), self.dark_mode); }
+                                                    }
+                                                    text: "01"
+                                                }
+                                            }
+
+                                            row_title_audio = <View> {
+                                                width: 184, height: Fill
+                                                padding: {left: 20, right: 12}
+                                                align: {y: 0.5}
+                                                show_bg: true
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        sdf.rect(self.rect_size.x - 1.0, 0., 1.0, self.rect_size.y);
+                                                        sdf.fill(mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode));
+                                                        return sdf.result;
+                                                    }
+                                                }
+                                                row_title_audio_label = <Label> {
+                                                    width: Fill, height: Fit
+                                                    draw_text: {
+                                                        instance dark_mode: 0.0
+                                                        text_style: <FONT_BOLD>{ font_size: 12.0 }
+                                                        fn get_color(self) -> vec4 { return mix(vec4(0.04, 0.045, 0.055, 1.0), vec4(0.94, 0.95, 0.98, 1.0), self.dark_mode); }
+                                                    }
+                                                    text: "LANGUAGE & AUDIO"
                                                 }
                                             }
 
                                             route_source_group = <View> {
                                                 width: Fill, height: Fill
                                                 flow: Down
-                                                spacing: 8
-                                                padding: {left: 14, right: 14, top: 12, bottom: 12}
-                                                show_bg: true
+                                                spacing: 0
+                                                padding: {left: 14, right: 10, top: 14, bottom: 12}
+                                                show_bg: false
                                                 draw_bg: {
                                                     instance dark_mode: 0.0
                                                     instance border_radius: 9.0
@@ -7004,7 +7245,7 @@ live_design! {
                                                 }
 
                                                 route_source_kicker = <Label> {
-                                                    width: Fit, height: Fit
+                                                    width: 0, height: 0
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7017,7 +7258,7 @@ live_design! {
                                                 }
 
                                                 route_source_language_value = <Label> {
-                                                    width: Fill, height: Fit
+                                                    width: 0, height: 0
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7030,17 +7271,17 @@ live_design! {
                                                 }
 
                                                 route_source_controls = <View> {
-                                                    width: Fill, height: 72
+                                                    width: Fill, height: Fill
                                                     flow: Right
                                                     spacing: 8
 
                                                     setting_row_src_lang = <View> {
-                                                        width: 140, height: Fill
+                                                        width: 148, height: 40
                                                         flow: Down
-                                                        spacing: 3
+                                                        spacing: 0
 
                                                         translation_src_lang_label = <Label> {
-                                                            width: Fill, height: Fit
+                                                            width: 0, height: 0
                                                             padding: {top: 0, bottom: 0}
                                                             draw_text: {
                                                                 instance dark_mode: 0.0
@@ -7050,22 +7291,21 @@ live_design! {
                                                             text: "Language"
                                                         }
 
-                                                        src_lang_dropdown = <SettingsDeviceDropDown> {
-                                                            width: Fill, height: 42
+                                                        src_lang_dropdown = <SwissDeviceDropDown> {
+                                                            width: Fill, height: 38
                                                             margin: {top: 0, bottom: 0}
-                                                            padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                             labels: ["Chinese", "English", "Japanese", "French"]
                                                             values: ["zh", "en", "ja", "fr"]
                                                         }
                                                     }
 
                                                     setting_row_source = <View> {
-                                                        width: Fill, height: Fill
+                                                        width: Fill, height: 40
                                                         flow: Down
-                                                        spacing: 3
+                                                        spacing: 0
 
                                                         translation_source_label = <Label> {
-                                                            width: Fill, height: Fit
+                                                            width: 0, height: 0
                                                             padding: {top: 0, bottom: 0}
                                                             draw_text: {
                                                                 instance dark_mode: 0.0
@@ -7075,10 +7315,9 @@ live_design! {
                                                             text: "Source"
                                                         }
 
-                                                        translation_source_dropdown = <SettingsDeviceDropDown> {
-                                                            width: Fill, height: 42
+                                                        translation_source_dropdown = <SwissDeviceDropDown> {
+                                                            width: Fill, height: 38
                                                             margin: {top: 0, bottom: 0}
-                                                            padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                             labels: ["System Default Microphone"]
                                                             values: ["default"]
                                                         }
@@ -7087,19 +7326,19 @@ live_design! {
                                             }
 
                                             route_arrow_stack = <View> {
-                                                width: 48, height: Fill
+                                                width: 46, height: Fill
                                                 flow: Down
-                                                align: {x: 0.5, y: 0.43}
+                                                align: {x: 0.5, y: 0.5}
 
-                                                route_swap_btn = <RouteSwapBtn> {}
+                                                route_swap_btn = <SwissSwapBtn> {}
                                             }
 
                                             route_target_group = <View> {
                                                 width: Fill, height: Fill
                                                 flow: Down
-                                                spacing: 8
-                                                padding: {left: 14, right: 14, top: 12, bottom: 12}
-                                                show_bg: true
+                                                spacing: 0
+                                                padding: {left: 10, right: 14, top: 14, bottom: 12}
+                                                show_bg: false
                                                 draw_bg: {
                                                     instance dark_mode: 0.0
                                                     instance border_radius: 9.0
@@ -7115,7 +7354,7 @@ live_design! {
                                                 }
 
                                                 route_target_kicker = <Label> {
-                                                    width: Fit, height: Fit
+                                                    width: 0, height: 0
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7128,7 +7367,7 @@ live_design! {
                                                 }
 
                                                 route_target_language_value = <Label> {
-                                                    width: Fill, height: Fit
+                                                    width: 0, height: 0
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
@@ -7141,17 +7380,17 @@ live_design! {
                                                 }
 
                                                 route_target_controls = <View> {
-                                                    width: Fill, height: 72
+                                                    width: Fill, height: Fill
                                                     flow: Right
                                                     spacing: 8
 
                                                     setting_row_tgt_lang = <View> {
-                                                        width: Fill, height: Fill
+                                                        width: Fill, height: 40
                                                         flow: Down
-                                                        spacing: 3
+                                                        spacing: 0
 
                                                         translation_tgt_lang_label = <Label> {
-                                                            width: Fill, height: Fit
+                                                            width: 0, height: 0
                                                             padding: {top: 0, bottom: 0}
                                                             draw_text: {
                                                                 instance dark_mode: 0.0
@@ -7161,10 +7400,9 @@ live_design! {
                                                             text: "Language"
                                                         }
 
-                                                        tgt_lang_dropdown = <SettingsDeviceDropDown> {
-                                                            width: Fill, height: 42
+                                                        tgt_lang_dropdown = <SwissDeviceDropDown> {
+                                                            width: Fill, height: 38
                                                             margin: {top: 0, bottom: 0}
-                                                            padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                             labels: ["English", "Chinese", "Japanese", "French", "No translation"]
                                                             values: ["en", "zh", "ja", "fr", "none"]
                                                         }
@@ -7174,16 +7412,16 @@ live_design! {
                                         }
 
                                         subtitle_window_header = <View> {
-                                            width: Fill, height: 42
+                                            width: 0, height: 0
                                             flow: Down
-                                            spacing: 2
-                                            padding: {left: 4, right: 4, top: 2}
+                                            spacing: 0
+                                            padding: 0
 
                                             subtitle_window_title = <Label> {
                                                 width: Fit, height: Fit
                                                 draw_text: {
                                                     instance dark_mode: 0.0
-                                                    text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
+                                                    text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
                                                     fn get_color(self) -> vec4 {
                                                         return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                     }
@@ -7192,7 +7430,7 @@ live_design! {
                                             }
 
                                             subtitle_window_desc = <Label> {
-                                                width: Fill, height: Fit
+                                                width: 0, height: 0
                                                 draw_text: {
                                                     instance dark_mode: 0.0
                                                     text_style: <FONT_REGULAR>{ font_size: 10.0 }
@@ -7208,34 +7446,84 @@ live_design! {
                                         subtitle_options_row = <RoundedView> {
                                             width: Fill, height: Fit
                                             flow: Down
-                                            spacing: 12
-                                            padding: 12
+                                            spacing: 0
+                                            padding: 0
+                                            show_bg: true
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 10.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.965, 0.974, 0.987, 1.0), vec4(0.105, 0.132, 0.184, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.22, 0.28, 0.37, 1.0), self.dark_mode);
+                                                    sdf.rect(0., 0., self.rect_size.x, self.rect_size.y);
+                                                    let bg = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.07, 0.075, 0.085, 1.0), self.dark_mode);
+                                                    let border = mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode);
                                                     sdf.fill(bg);
-                                                    sdf.stroke(border, 1.0);
+                                                    sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5);
+                                                    sdf.fill(border);
                                                     return sdf.result;
                                                 }
                                             }
 
                                             subtitle_options_primary_row = <View> {
-                                                width: Fill, height: 68
+                                                width: Fill, height: 88
                                                 flow: Right
-                                                spacing: 12
+                                                spacing: 0
+
+                                                row_number_subtitle = <View> {
+                                                    width: 72, height: Fill
+                                                    align: {x: 0.5, y: 0.5}
+                                                    show_bg: true
+                                                    draw_bg: {
+                                                        instance dark_mode: 0.0
+                                                        fn pixel(self) -> vec4 {
+                                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                            sdf.rect(self.rect_size.x - 1.0, 0., 1.0, self.rect_size.y);
+                                                            sdf.fill(mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode));
+                                                            return sdf.result;
+                                                        }
+                                                    }
+                                                    row_number_subtitle_label = <Label> {
+                                                        draw_text: {
+                                                            instance dark_mode: 0.0
+                                                            text_style: <FONT_BOLD>{ font_size: 28.0 }
+                                                            fn get_color(self) -> vec4 { return mix(vec4(0.035, 0.04, 0.05, 1.0), vec4(0.96, 0.97, 0.99, 1.0), self.dark_mode); }
+                                                        }
+                                                        text: "02"
+                                                    }
+                                                }
+
+                                                row_title_subtitle = <View> {
+                                                    width: 184, height: Fill
+                                                    padding: {left: 20, right: 12}
+                                                    align: {y: 0.5}
+                                                    show_bg: true
+                                                    draw_bg: {
+                                                        instance dark_mode: 0.0
+                                                        fn pixel(self) -> vec4 {
+                                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                            sdf.rect(self.rect_size.x - 1.0, 0., 1.0, self.rect_size.y);
+                                                            sdf.fill(mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode));
+                                                            return sdf.result;
+                                                        }
+                                                    }
+                                                    row_title_subtitle_label = <Label> {
+                                                        width: Fill, height: Fit
+                                                        draw_text: {
+                                                            instance dark_mode: 0.0
+                                                            text_style: <FONT_BOLD>{ font_size: 12.0 }
+                                                            fn get_color(self) -> vec4 { return mix(vec4(0.04, 0.045, 0.055, 1.0), vec4(0.94, 0.95, 0.98, 1.0), self.dark_mode); }
+                                                        }
+                                                        text: "SUBTITLE WINDOW"
+                                                    }
+                                                }
 
                                                 setting_row_overlay = <View> {
-                                                width: 224, height: 68
+                                                width: Fill, height: Fill
                                                 flow: Down
-                                                spacing: 4
+                                                spacing: 0
+                                                padding: {left: 14, right: 6, top: 25, bottom: 25}
 
                                                 translation_overlay_style_label = <Label> {
-                                                    width: Fill, height: 22
+                                                    width: 0, height: 0
                                                     align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
@@ -7246,19 +7534,19 @@ live_design! {
                                                     text: "Style"
                                                 }
 
-                                                overlay_style_buttons = <ToolbarSegmentGroup> {
-                                                    width: Fill, height: 42
+                                                overlay_style_buttons = <SwissSegmentGroup> {
+                                                    width: Fill, height: 38
 
-                                                    overlay_style_compact = <ToolbarSegmentBtn> {
-                                                        width: Fill, height: 36
+                                                    overlay_style_compact = <SwissSegmentBtn> {
+                                                        width: Fill, height: 38
                                                         padding: {left: 8, right: 8}
                                                         text: "Compact"
                                                         draw_bg: { active: 0.0 }
                                                         draw_text: { active: 0.0 }
                                                     }
 
-                                                    overlay_style_full = <ToolbarSegmentBtn> {
-                                                        width: Fill, height: 36
+                                                    overlay_style_full = <SwissSegmentBtn> {
+                                                        width: Fill, height: 38
                                                         padding: {left: 8, right: 8}
                                                         text: "Large"
                                                         draw_bg: { active: 1.0 }
@@ -7268,12 +7556,13 @@ live_design! {
                                                 }
 
                                                 setting_row_font_size = <View> {
-                                                width: 224, height: 68
+                                                width: Fill, height: Fill
                                                 flow: Down
-                                                spacing: 4
+                                                spacing: 0
+                                                padding: {left: 6, right: 6, top: 25, bottom: 25}
 
                                                 translation_font_size_label = <Label> {
-                                                    width: Fill, height: 22
+                                                    width: 0, height: 0
                                                     align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
@@ -7284,22 +7573,36 @@ live_design! {
                                                     text: "Text"
                                                 }
 
-                                                font_size_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 40
-                                                    margin: {top: 0, bottom: 0}
-                                                    padding: {left: 10, right: 28, top: 9, bottom: 9}
-                                                    labels: ["16pt", "20pt", "24pt", "30pt", "36pt", "44pt", "52pt", "64pt", "80pt", "96pt", "120pt", "160pt"]
-                                                    values: ["16", "20", "24", "30", "36", "44", "52", "64", "80", "96", "120", "160"]
+                                                font_size_stepper = <SwissSegmentGroup> {
+                                                    width: Fill, height: 38
+                                                    align: {x: 0.5, y: 0.5}
+                                                    font_size_decrease_btn = <SwissIconBtn> {
+                                                        width: 38, height: 38, text: "−"
+                                                    }
+                                                    font_size_value = <Label> {
+                                                        width: 72, height: 38
+                                                        align: {x: 0.5, y: 0.5}
+                                                        draw_text: {
+                                                            instance dark_mode: 0.0
+                                                            text_style: <FONT_MEDIUM>{ font_size: 12.0 }
+                                                            fn get_color(self) -> vec4 { return mix(vec4(0.04, 0.045, 0.055, 1.0), vec4(0.94, 0.95, 0.98, 1.0), self.dark_mode); }
+                                                        }
+                                                        text: "24 pt"
+                                                    }
+                                                    font_size_increase_btn = <SwissIconBtn> {
+                                                        width: 38, height: 38, text: "+"
+                                                    }
                                                 }
                                                 }
 
-                                                setting_row_footer_font_size = <View> {
-                                                width: 224, height: 68
+                                                setting_row_view_style = <View> {
+                                                width: Fill, height: Fill
                                                 flow: Down
-                                                spacing: 4
+                                                spacing: 0
+                                                padding: {left: 6, right: 14, top: 25, bottom: 25}
 
-                                                translation_footer_font_size_label = <Label> {
-                                                    width: Fill, height: 22
+                                                translation_view_style_label = <Label> {
+                                                    width: 0, height: 0
                                                     align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
@@ -7307,31 +7610,42 @@ live_design! {
                                                         text_style: <FONT_MEDIUM>{ font_size: 10.0 }
                                                         fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
                                                     }
-                                                    text: "Footer"
+                                                    text: "Layout"
                                                 }
 
-                                                footer_font_size_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 40
-                                                    margin: {top: 0, bottom: 0}
-                                                    padding: {left: 10, right: 28, top: 9, bottom: 9}
-                                                    labels: ["8pt", "10pt", "12pt", "14pt", "16pt", "18pt", "20pt", "22pt", "24pt", "26pt", "28pt", "30pt", "32pt"]
-                                                    values: ["8", "10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32"]
+                                                view_style_buttons = <SwissSegmentGroup> {
+                                                    width: Fill, height: 38
+                                                    view_style_split = <SwissSegmentBtn> {
+                                                        width: Fill, height: 38
+                                                        padding: {left: 8, right: 8}
+                                                        text: "Split"
+                                                        draw_bg: { active: 1.0 }
+                                                        draw_text: { active: 1.0 }
+                                                    }
+                                                    view_style_classic = <SwissSegmentBtn> {
+                                                        width: Fill, height: 38
+                                                        padding: {left: 8, right: 8}
+                                                        text: "Classic"
+                                                        draw_bg: { active: 0.0 }
+                                                        draw_text: { active: 0.0 }
+                                                    }
                                                 }
                                                 }
                                             }
 
                                             subtitle_options_secondary_row = <View> {
-                                                width: Fill, height: 68
+                                                width: Fill, height: 54
                                                 flow: Right
                                                 spacing: 12
+                                                visible: false
 
                                                 setting_row_anchor_position = <View> {
-                                                width: 224, height: 68
+                                                width: Fill, height: 54
                                                 flow: Down
                                                 spacing: 4
 
                                                 anchor_position_label_row = <View> {
-                                                    width: Fill, height: 22
+                                                    width: Fill, height: 16
                                                     flow: Right
                                                     spacing: 4
                                                     align: {y: 0.5}
@@ -7351,7 +7665,7 @@ live_design! {
                                                 }
 
                                                 anchor_position_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 40
+                                                    width: Fill, height: 34
                                                     margin: {top: 0, bottom: 0}
                                                     padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                     labels: ["Center-top", "Center", "Center-bottom", "Bottom"]
@@ -7360,12 +7674,12 @@ live_design! {
                                                 }
 
                                                 setting_row_opacity = <View> {
-                                                width: 224, height: 68
+                                                width: Fill, height: 54
                                                 flow: Down
                                                 spacing: 4
 
                                                 translation_opacity_label = <Label> {
-                                                    width: Fill, height: 22
+                                                    width: Fill, height: 16
                                                     align: {y: 0.5}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
@@ -7377,7 +7691,7 @@ live_design! {
                                                 }
 
                                                 opacity_dropdown = <SettingsDeviceDropDown> {
-                                                    width: Fill, height: 40
+                                                    width: Fill, height: 34
                                                     margin: {top: 0, bottom: 0}
                                                     padding: {left: 10, right: 28, top: 9, bottom: 9}
                                                     labels: ["100%", "90%", "85%", "75%", "65%", "50%", "35%"]
@@ -7385,54 +7699,23 @@ live_design! {
                                                 }
                                                 }
 
-                                                setting_row_view_style = <View> {
-                                                width: 224, height: 68
-                                                flow: Down
-                                                spacing: 4
+                                            }
 
-                                                translation_view_style_label = <Label> {
-                                                    width: Fill, height: 22
-                                                    align: {y: 0.5}
-                                                    padding: {top: 0, bottom: 0}
-                                                    draw_text: {
-                                                        instance dark_mode: 0.0
-                                                        text_style: <FONT_MEDIUM>{ font_size: 10.0 }
-                                                        fn get_color(self) -> vec4 { return mix(vec4(0.35, 0.41, 0.50, 1.0), vec4(0.63, 0.69, 0.78, 1.0), self.dark_mode); }
-                                                    }
-                                                    text: "Layout"
-                                                }
-
-                                                view_style_buttons = <ToolbarSegmentGroup> {
-                                                    width: Fill, height: 42
-
-                                                    view_style_split = <ToolbarSegmentBtn> {
-                                                        width: Fill, height: 36
-                                                        padding: {left: 8, right: 8}
-                                                        text: "Split"
-                                                        draw_bg: { active: 1.0 }
-                                                        draw_text: { active: 1.0 }
-                                                    }
-
-                                                    view_style_classic = <ToolbarSegmentBtn> {
-                                                        width: Fill, height: 36
-                                                        padding: {left: 8, right: 8}
-                                                        text: "Classic"
-                                                        draw_bg: { active: 0.0 }
-                                                        draw_text: { active: 0.0 }
-                                                    }
-                                                }
-                                                }
+                                            subtitle_advanced_toggle_btn = <SwissActionBtn> {
+                                                width: Fill, height: 30
+                                                text: "Show advanced subtitle settings"
                                             }
                                         }
                                     }
 
                                     settings_side_panel = <View> {
-                                        width: 312, height: Fit
+                                        width: Fill, height: Fit
                                         flow: Down
-                                        spacing: 10
+                                        spacing: 0
 
                                         side_panel_header = <View> {
-                                            width: Fill, height: Fit
+                                            width: 0, height: 0
+                                            visible: false
                                             flow: Down
                                             spacing: 2
                                             padding: {left: 4, right: 4, top: 2}
@@ -7466,33 +7749,83 @@ live_design! {
                                         voice_settings_card = <RoundedView> {
                                             width: Fill, height: Fit
                                             flow: Down
-                                            spacing: 8
-                                            padding: 12
+                                            spacing: 0
+                                            padding: 0
+                                            show_bg: true
                                             draw_bg: {
                                                 instance dark_mode: 0.0
-                                                instance border_radius: 10.0
                                                 fn pixel(self) -> vec4 {
                                                     let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.965, 0.974, 0.987, 1.0), vec4(0.105, 0.132, 0.184, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.83, 0.87, 0.92, 1.0), vec4(0.22, 0.28, 0.37, 1.0), self.dark_mode);
+                                                    sdf.rect(0., 0., self.rect_size.x, self.rect_size.y);
+                                                    let bg = mix(vec4(0.985, 0.985, 0.98, 1.0), vec4(0.07, 0.075, 0.085, 1.0), self.dark_mode);
+                                                    let border = mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode);
                                                     sdf.fill(bg);
-                                                    sdf.stroke(border, 1.0);
+                                                    sdf.rect(0., self.rect_size.y - 1.5, self.rect_size.x, 1.5);
+                                                    sdf.fill(border);
                                                     return sdf.result;
                                                 }
                                             }
 
                                             section_voice = <View> {
-                                                width: Fill, height: Fit
-                                                flow: Down
-                                                spacing: 2
+                                                width: Fill, height: 50
+                                                flow: Right
+                                                spacing: 0
+                                                align: {y: 0.5}
+
+                                                row_number_voice = <View> {
+                                                    width: 72, height: Fill
+                                                    align: {x: 0.5, y: 0.5}
+                                                    show_bg: true
+                                                    draw_bg: {
+                                                        instance dark_mode: 0.0
+                                                        fn pixel(self) -> vec4 {
+                                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                            sdf.rect(self.rect_size.x - 1.0, 0., 1.0, self.rect_size.y);
+                                                            sdf.fill(mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode));
+                                                            return sdf.result;
+                                                        }
+                                                    }
+                                                    row_number_voice_label = <Label> {
+                                                        draw_text: {
+                                                            instance dark_mode: 0.0
+                                                            text_style: <FONT_BOLD>{ font_size: 28.0 }
+                                                            fn get_color(self) -> vec4 { return mix(vec4(0.035, 0.04, 0.05, 1.0), vec4(0.96, 0.97, 0.99, 1.0), self.dark_mode); }
+                                                        }
+                                                        text: "03"
+                                                    }
+                                                }
+
+                                                row_title_voice = <View> {
+                                                    width: 184, height: Fill
+                                                    padding: {left: 20, right: 12}
+                                                    align: {y: 0.5}
+                                                    show_bg: true
+                                                    draw_bg: {
+                                                        instance dark_mode: 0.0
+                                                        fn pixel(self) -> vec4 {
+                                                            let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                            sdf.rect(self.rect_size.x - 1.0, 0., 1.0, self.rect_size.y);
+                                                            sdf.fill(mix(vec4(0.05, 0.055, 0.065, 1.0), vec4(0.76, 0.78, 0.82, 1.0), self.dark_mode));
+                                                            return sdf.result;
+                                                        }
+                                                    }
+                                                    row_title_voice_label = <Label> {
+                                                        width: Fill, height: Fit
+                                                        draw_text: {
+                                                            instance dark_mode: 0.0
+                                                            text_style: <FONT_BOLD>{ font_size: 12.0 }
+                                                            fn get_color(self) -> vec4 { return mix(vec4(0.04, 0.045, 0.055, 1.0), vec4(0.94, 0.95, 0.98, 1.0), self.dark_mode); }
+                                                        }
+                                                        text: "SPOKEN TRANSLATION"
+                                                    }
+                                                }
 
                                                 section_voice_title = <Label> {
-                                                    width: Fit, height: Fit
+                                                    width: 0, height: 0
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
-                                                        text_style: <FONT_SEMIBOLD>{ font_size: 15.0 }
+                                                        text_style: <FONT_SEMIBOLD>{ font_size: 14.0 }
                                                         fn get_color(self) -> vec4 {
                                                             return mix(vec4(0.12, 0.16, 0.22, 1.0), vec4(0.92, 0.95, 0.99, 1.0), self.dark_mode);
                                                         }
@@ -7502,12 +7835,13 @@ live_design! {
 
                                                 voice_note = <Label> {
                                                     width: Fill, height: Fit
+                                                    margin: {left: 16, right: 14}
                                                     padding: {top: 0, bottom: 0}
                                                     draw_text: {
                                                         instance dark_mode: 0.0
                                                         text_style: <FONT_REGULAR>{ font_size: 11.0 }
                                                         fn get_color(self) -> vec4 {
-                                                            return mix(vec4(0.45, 0.50, 0.58, 1.0), vec4(0.52, 0.58, 0.67, 1.0), self.dark_mode);
+                                                            return mix(vec4(0.27, 0.28, 0.30, 1.0), vec4(0.68, 0.70, 0.74, 1.0), self.dark_mode);
                                                         }
                                                         wrap: Word
                                                     }
@@ -7516,10 +7850,21 @@ live_design! {
                                             }
 
                                             setting_row_spoken_translation = <View> {
-                                                width: Fill, height: 34
+                                                width: Fill, height: 38
                                                 flow: Right
                                                 align: {y: 0.5}
-                                                spacing: 3
+                                                spacing: 0
+                                                padding: {left: 272, right: 14}
+                                                show_bg: true
+                                                draw_bg: {
+                                                    instance dark_mode: 0.0
+                                                    fn pixel(self) -> vec4 {
+                                                        let sdf = Sdf2d::viewport(self.pos * self.rect_size);
+                                                        sdf.rect(0., 0., self.rect_size.x, 1.0);
+                                                        sdf.fill(mix(vec4(0.50, 0.51, 0.52, 1.0), vec4(0.34, 0.36, 0.40, 1.0), self.dark_mode));
+                                                        return sdf.result;
+                                                    }
+                                                }
 
                                                 spoken_translation_label = <Label> {
                                                     width: Fill, height: Fit
@@ -7534,7 +7879,7 @@ live_design! {
                                                     text: "Spoken Output"
                                                 }
 
-                                                spoken_translation_off_btn = <ToolbarSegmentBtn> {
+                                                spoken_translation_off_btn = <SwissSegmentBtn> {
                                                     width: 54, height: 32
                                                     padding: {left: 8, right: 8}
                                                     text: "Off"
@@ -7542,7 +7887,7 @@ live_design! {
                                                     draw_text: { active: 1.0 }
                                                 }
 
-                                                spoken_translation_on_btn = <ToolbarSegmentBtn> {
+                                                spoken_translation_on_btn = <SwissSegmentBtn> {
                                                     width: 54, height: 32
                                                     padding: {left: 8, right: 8}
                                                     text: "On"
@@ -7551,10 +7896,17 @@ live_design! {
                                                 }
                                             }
 
+                                            spoken_details_toggle_btn = <SwissActionBtn> {
+                                                width: Fill, height: 30
+                                                margin: {left: 272, right: 14, bottom: 10}
+                                                text: "Show voice and device"
+                                            }
+
                                             setting_row_spoken_output = <View> {
                                                 width: Fill, height: 64
                                                 flow: Down
                                                 spacing: 4
+                                                visible: false
 
                                                 spoken_output_label = <Label> {
                                                     width: Fill, height: Fit
@@ -7591,6 +7943,7 @@ live_design! {
                                                 width: Fill, height: 184
                                                 flow: Down
                                                 spacing: 4
+                                                visible: false
 
                                                 spoken_voice_label = <Label> {
                                                     width: Fill, height: Fit
@@ -7725,51 +8078,6 @@ live_design! {
                                                 }
                                             }
 
-                                            voice_support_note = <Label> {
-                                                width: Fill, height: 0
-                                                draw_text: {
-                                                    instance dark_mode: 0.0
-                                                    text_style: <FONT_REGULAR>{ font_size: 10.0 }
-                                                    fn get_color(self) -> vec4 {
-                                                        return mix(vec4(0.45, 0.50, 0.58, 1.0), vec4(0.58, 0.64, 0.72, 1.0), self.dark_mode);
-                                                    }
-                                                    wrap: Word
-                                                }
-                                                text: "Local Qwen voices · Preview in list"
-                                            }
-                                        }
-
-                                        privacy_status_card = <RoundedView> {
-                                            width: Fill, height: 0
-                                            visible: false
-                                            flow: Down
-                                            padding: {left: 14, right: 14, top: 10, bottom: 10}
-                                            draw_bg: {
-                                                instance dark_mode: 0.0
-                                                instance border_radius: 9.0
-                                                fn pixel(self) -> vec4 {
-                                                    let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                                    sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                                    let bg = mix(vec4(0.90, 0.98, 0.93, 1.0), vec4(0.08, 0.17, 0.11, 1.0), self.dark_mode);
-                                                    let border = mix(vec4(0.58, 0.84, 0.66, 1.0), vec4(0.14, 0.32, 0.22, 1.0), self.dark_mode);
-                                                    sdf.fill(bg);
-                                                    sdf.stroke(border, 1.0);
-                                                    return sdf.result;
-                                                }
-                                            }
-
-                                            privacy_status_label = <Label> {
-                                                width: Fill, height: Fit
-                                                draw_text: {
-                                                    instance dark_mode: 0.0
-                                                    text_style: <FONT_MEDIUM>{ font_size: 12.0 }
-                                                    fn get_color(self) -> vec4 {
-                                                        return mix(vec4(0.08, 0.42, 0.22, 1.0), vec4(0.60, 0.90, 0.72, 1.0), self.dark_mode);
-                                                    }
-                                                    wrap: Word
-                                                }
-                                                text: "Offline and private by default"
-                                            }
                                         }
                                     }
 
@@ -7796,29 +8104,28 @@ live_design! {
 
                             // ── 单按钮：根据状态在 Start ↔ Stop 切换 ─────────
                             translation_action_btn = <Button> {
-                                width: 440, height: 46
-                                margin: {top: 2}
+                                width: Fill, height: 54
+                                margin: {top: 10}
                                 padding: {left: 24, right: 24}
                                 text: "Start Live Translation"
                                 draw_bg: {
-                                    instance border_radius: 9.0
                                     instance running: 0.0
                                     instance hover: 0.0
                                     instance pressed: 0.0
                                     fn pixel(self) -> vec4 {
                                         let sdf = Sdf2d::viewport(self.pos * self.rect_size);
-                                        sdf.box(0., 0., self.rect_size.x, self.rect_size.y, self.border_radius);
-                                        let start_color = vec4(0.231, 0.435, 0.831, 1.0);
-                                        let stop_color = vec4(0.85, 0.25, 0.25, 1.0);
+                                        sdf.rect(0., 0., self.rect_size.x, self.rect_size.y);
+                                        let start_color = vec4(0.02, 0.19, 0.95, 1.0);
+                                        let stop_color = vec4(0.90, 0.08, 0.10, 1.0);
                                         let base = mix(start_color, stop_color, self.running);
-                                        let hover_color = mix(vec4(0.19, 0.38, 0.76, 1.0), vec4(0.78, 0.20, 0.20, 1.0), self.running);
-                                        let pressed_color = mix(vec4(0.15, 0.32, 0.68, 1.0), vec4(0.68, 0.16, 0.16, 1.0), self.running);
+                                        let hover_color = mix(vec4(0.01, 0.14, 0.83, 1.0), vec4(0.80, 0.05, 0.07, 1.0), self.running);
+                                        let pressed_color = mix(vec4(0.0, 0.10, 0.70, 1.0), vec4(0.68, 0.03, 0.05, 1.0), self.running);
                                         sdf.fill(mix(mix(base, hover_color, self.hover), pressed_color, self.pressed));
                                         return sdf.result;
                                     }
                                 }
                                 draw_text: {
-                                    text_style: <FONT_SEMIBOLD>{ font_size: 13.0 }
+                                    text_style: <FONT_BOLD>{ font_size: 14.0 }
                                     fn get_color(self) -> vec4 { return vec4(1.0, 1.0, 1.0, 1.0); }
                                 }
                             }
@@ -10338,6 +10645,10 @@ pub struct TTSScreen {
     /// Index into translation_audio_devices (0 = system default)
     #[rust]
     translation_device_idx: usize,
+    #[rust]
+    translation_subtitle_advanced_open: bool,
+    #[rust]
+    translation_voice_settings_open: bool,
     /// Whether the overlay is in fullscreen mode
     #[rust]
     translation_overlay_fullscreen: bool,
@@ -10638,8 +10949,8 @@ impl Widget for TTSScreen {
             self.app_update_check_started_at = Some(std::time::Instant::now());
             // Translation page defaults
             self.translation_running = false;
-            self.translation_src_lang = "zh".to_string();
-            self.translation_tgt_lang = "en".to_string();
+            self.translation_src_lang = self.app_preferences.translation_source_language.clone();
+            self.translation_tgt_lang = self.app_preferences.translation_target_language.clone();
             self.translation_metrics_timer = Timer::default();
             self.translation_transcript_autosave_timer = Timer::default();
             self.translation_transcript_autosave_cursor = 0;
@@ -10656,19 +10967,28 @@ impl Widget for TTSScreen {
             self.spoken_preview_pending_voice_id = None;
             self.spoken_translation_qwen_active = false;
             self.translation_audio_devices = Vec::new();
-            self.translation_device_idx = 0; // 0 = System Audio, 1 = System Default Mic
-            self.translation_overlay_fullscreen = true;
-            self.translation_subtitle_split = true;
-            self.translation_overlay_opacity = 1.0;
-            self.translation_overlay_font_size_preset = "24".to_string();
+            self.translation_device_idx = 0;
+            self.translation_subtitle_advanced_open = false;
+            self.translation_voice_settings_open = false;
+            self.translation_overlay_fullscreen =
+                self.app_preferences.translation_overlay_fullscreen;
+            self.translation_subtitle_split = self.app_preferences.translation_subtitle_split;
+            self.translation_overlay_opacity = self.app_preferences.translation_overlay_opacity;
+            self.translation_overlay_font_size_preset =
+                self.app_preferences.translation_font_size_preset.clone();
             self.translation_overlay_footer_font_size_preset =
                 Self::linked_footer_font_size_preset(&self.translation_overlay_font_size_preset)
                     .to_string();
-            self.translation_overlay_anchor_position_preset = "50".to_string(); // "Center"
+            self.translation_overlay_anchor_position_preset = self
+                .app_preferences
+                .translation_anchor_position_preset
+                .clone();
             self.translation_permission_probed = false;
             self.translation_permission_timer = Timer::default();
             self.ensure_translation_permission_probe(cx);
             self.update_translation_overlay_style_buttons(cx);
+            self.update_translation_font_size_control(cx);
+            self.update_translation_secondary_settings_visibility(cx);
             // Add initial log entries
             self.log_entries
                 .push("[INFO] [translation] Hen Local Translator initialized".to_string());
@@ -11273,15 +11593,41 @@ impl Widget for TTSScreen {
                     .translation_overlay_fullscreen
                     .set(self.translation_overlay_fullscreen);
                 shared
+                    .translation_subtitle_split
+                    .set(self.translation_subtitle_split);
+                shared
                     .translation_overlay_opacity
                     .set(self.translation_overlay_opacity);
             }
-            self.update_translation_footer_font_size_dropdown(cx);
+            self.update_translation_font_size_control(cx);
             self.update_translation_action_button(cx);
             self.ensure_translation_permission_probe(cx);
         }
 
         // ── Translation page: single Start/Stop action button ────────────────
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .translation_settings_btn
+            ))
+            .clicked(&actions)
+        {
+            self.global_settings_visible = true;
+            self.update_language_options(cx);
+            self.update_theme_options(cx);
+            self.view
+                .view(ids!(global_settings_modal))
+                .set_visible(cx, true);
+            self.view.redraw(cx);
+        }
+
         if self
             .view
             .button(ids!(
@@ -11343,6 +11689,7 @@ impl Widget for TTSScreen {
                 self.update_translation_lang_dropdowns(cx);
                 self.sync_translation_overlay_lang_pair();
                 self.update_spoken_translation_voice_dropdown(cx);
+                self.save_translation_preferences(cx);
                 self.show_toast(cx, self.tr("已交换语言方向", "Language direction swapped"));
             }
         }
@@ -11375,6 +11722,7 @@ impl Widget for TTSScreen {
             } else {
                 self.translation_device_idx = idx;
                 if idx == 0 {
+                    self.app_preferences.translation_input_device = "__system_audio__".to_string();
                     // System Audio via ScreenCaptureKit
                     self.send_audio_source_to_bridge(true);
                     if let Some(shared) = self.translation_shared_state() {
@@ -11390,10 +11738,14 @@ impl Widget for TTSScreen {
                     } else {
                         None
                     };
+                    self.app_preferences.translation_input_device = device_for_bridge
+                        .clone()
+                        .unwrap_or_else(|| "__default_microphone__".to_string());
                     if let Some(shared) = self.translation_shared_state() {
                         shared.translation_input_device.set(device_for_bridge);
                     }
                 }
+                self.save_translation_preferences(cx);
             }
         }
 
@@ -11421,6 +11773,7 @@ impl Widget for TTSScreen {
             if let Some(shared) = self.translation_shared_state() {
                 shared.translation_overlay_fullscreen.set(false);
             }
+            self.save_translation_preferences(cx);
         }
         if self
             .view
@@ -11445,6 +11798,7 @@ impl Widget for TTSScreen {
             if let Some(shared) = self.translation_shared_state() {
                 shared.translation_overlay_fullscreen.set(true);
             }
+            self.save_translation_preferences(cx);
         }
 
         if self
@@ -11470,6 +11824,7 @@ impl Widget for TTSScreen {
             if let Some(shared) = self.translation_shared_state() {
                 shared.translation_subtitle_split.set(true);
             }
+            self.save_translation_preferences(cx);
         }
         if self
             .view
@@ -11493,6 +11848,51 @@ impl Widget for TTSScreen {
             self.update_translation_view_style_buttons(cx);
             if let Some(shared) = self.translation_shared_state() {
                 shared.translation_subtitle_split.set(false);
+            }
+            self.save_translation_preferences(cx);
+        }
+
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .subtitle_advanced_toggle_btn
+            ))
+            .clicked(&actions)
+        {
+            self.translation_subtitle_advanced_open = !self.translation_subtitle_advanced_open;
+            self.update_translation_secondary_settings_visibility(cx);
+        }
+
+        if self
+            .view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .settings_side_panel
+                    .voice_settings_card
+                    .spoken_details_toggle_btn
+            ))
+            .clicked(&actions)
+        {
+            if self.app_preferences.experimental_spoken_translation_enabled {
+                self.translation_voice_settings_open = !self.translation_voice_settings_open;
+                self.update_translation_secondary_settings_visibility(cx);
             }
         }
 
@@ -11522,6 +11922,7 @@ impl Widget for TTSScreen {
                 if let Some(shared) = self.translation_shared_state() {
                     shared.translation_overlay_opacity.set(opacity);
                 }
+                self.save_translation_preferences(cx);
             }
         }
 
@@ -11556,6 +11957,7 @@ impl Widget for TTSScreen {
                     self.update_translation_lang_dropdowns(cx);
                     self.sync_translation_overlay_lang_pair();
                     self.update_spoken_translation_voice_dropdown(cx);
+                    self.save_translation_preferences(cx);
                 }
             }
         }
@@ -11591,6 +11993,7 @@ impl Widget for TTSScreen {
                     self.update_translation_lang_dropdowns(cx);
                     self.sync_translation_overlay_lang_pair();
                     self.update_spoken_translation_voice_dropdown(cx);
+                    self.save_translation_preferences(cx);
                 }
             }
         }
@@ -11846,14 +12249,14 @@ impl Widget for TTSScreen {
             );
         }
 
-        // Overlay font size preset dropdown
+        // Overlay font size preset stepper
         {
             let presets = [
                 "16", "20", "24", "30", "36", "44", "52", "64", "80", "96", "120", "160",
             ];
-            if let Some(idx) = self
+            let decrease = self
                 .view
-                .bounded_drop_down(ids!(
+                .button(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11865,30 +12268,13 @@ impl Widget for TTSScreen {
                         .route_column
                         .subtitle_options_row
                         .setting_row_font_size
-                        .font_size_dropdown
+                        .font_size_stepper
+                        .font_size_decrease_btn
                 ))
-                .changed(&actions)
-            {
-                if let Some(preset) = presets.get(idx) {
-                    self.translation_overlay_font_size_preset = (*preset).to_string();
-                    self.translation_overlay_footer_font_size_preset =
-                        Self::linked_footer_font_size_preset(preset).to_string();
-                    self.update_translation_font_size_dropdown(cx);
-                    self.sync_translation_overlay_font_size();
-                    self.update_translation_footer_font_size_dropdown(cx);
-                    self.sync_translation_overlay_footer_font_size();
-                }
-            }
-        }
-
-        // Overlay footer (branding) font size preset dropdown — live-changeable.
-        {
-            let presets = [
-                "8", "10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32",
-            ];
-            if let Some(idx) = self
+                .clicked(&actions);
+            let increase = self
                 .view
-                .bounded_drop_down(ids!(
+                .button(ids!(
                     content_wrapper
                         .main_content
                         .left_column
@@ -11899,16 +12285,28 @@ impl Widget for TTSScreen {
                         .settings_card
                         .route_column
                         .subtitle_options_row
-                        .setting_row_footer_font_size
-                        .footer_font_size_dropdown
+                        .setting_row_font_size
+                        .font_size_stepper
+                        .font_size_increase_btn
                 ))
-                .changed(&actions)
-            {
-                if let Some(preset) = presets.get(idx) {
-                    self.translation_overlay_footer_font_size_preset = (*preset).to_string();
-                    self.update_translation_footer_font_size_dropdown(cx);
-                    self.sync_translation_overlay_footer_font_size();
-                }
+                .clicked(&actions);
+            if decrease || increase {
+                let current = presets
+                    .iter()
+                    .position(|preset| *preset == self.translation_overlay_font_size_preset)
+                    .unwrap_or(2);
+                let next = if decrease {
+                    current.saturating_sub(1)
+                } else {
+                    (current + 1).min(presets.len() - 1)
+                };
+                self.translation_overlay_font_size_preset = presets[next].to_string();
+                self.translation_overlay_footer_font_size_preset =
+                    Self::linked_footer_font_size_preset(presets[next]).to_string();
+                self.update_translation_font_size_control(cx);
+                self.sync_translation_overlay_font_size();
+                self.sync_translation_overlay_footer_font_size();
+                self.save_translation_preferences(cx);
             }
         }
 
@@ -11937,6 +12335,7 @@ impl Widget for TTSScreen {
                     self.translation_overlay_anchor_position_preset = (*preset).to_string();
                     self.update_translation_anchor_position_dropdown(cx);
                     self.sync_translation_overlay_anchor_position();
+                    self.save_translation_preferences(cx);
                 }
             }
         }
@@ -13309,28 +13708,14 @@ impl Widget for TTSScreen {
         if self
             .view
             .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_language_controls
-                    .quick_lang_en_btn
+                global_settings_modal
+                    .settings_dialog
+                    .settings_content
+                    .language_section
+                    .language_options
+                    .lang_en_option
             ))
             .clicked(&actions)
-            || self
-                .view
-                .button(ids!(
-                    global_settings_modal
-                        .settings_dialog
-                        .settings_content
-                        .language_section
-                        .language_options
-                        .lang_en_option
-                ))
-                .clicked(&actions)
             || self
                 .view
                 .button(ids!(
@@ -13360,28 +13745,14 @@ impl Widget for TTSScreen {
         if self
             .view
             .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_language_controls
-                    .quick_lang_zh_btn
+                global_settings_modal
+                    .settings_dialog
+                    .settings_content
+                    .language_section
+                    .language_options
+                    .lang_zh_option
             ))
             .clicked(&actions)
-            || self
-                .view
-                .button(ids!(
-                    global_settings_modal
-                        .settings_dialog
-                        .settings_content
-                        .language_section
-                        .language_options
-                        .lang_zh_option
-                ))
-                .clicked(&actions)
             || self
                 .view
                 .button(ids!(
@@ -13412,28 +13783,14 @@ impl Widget for TTSScreen {
         if self
             .view
             .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-                    .quick_theme_light_btn
+                global_settings_modal
+                    .settings_dialog
+                    .settings_content
+                    .theme_section
+                    .theme_options
+                    .theme_light_option
             ))
             .clicked(&actions)
-            || self
-                .view
-                .button(ids!(
-                    global_settings_modal
-                        .settings_dialog
-                        .settings_content
-                        .theme_section
-                        .theme_options
-                        .theme_light_option
-                ))
-                .clicked(&actions)
             || self
                 .view
                 .button(ids!(
@@ -13460,28 +13817,14 @@ impl Widget for TTSScreen {
         if self
             .view
             .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-                    .quick_theme_dark_btn
+                global_settings_modal
+                    .settings_dialog
+                    .settings_content
+                    .theme_section
+                    .theme_options
+                    .theme_dark_option
             ))
             .clicked(&actions)
-            || self
-                .view
-                .button(ids!(
-                    global_settings_modal
-                        .settings_dialog
-                        .settings_content
-                        .theme_section
-                        .theme_options
-                        .theme_dark_option
-                ))
-                .clicked(&actions)
             || self
                 .view
                 .button(ids!(
@@ -15901,6 +16244,19 @@ impl TTSScreen {
         }
     }
 
+    fn save_translation_preferences(&mut self, cx: &mut Cx) {
+        self.app_preferences.translation_source_language = self.translation_src_lang.clone();
+        self.app_preferences.translation_target_language = self.translation_tgt_lang.clone();
+        self.app_preferences.translation_overlay_fullscreen = self.translation_overlay_fullscreen;
+        self.app_preferences.translation_subtitle_split = self.translation_subtitle_split;
+        self.app_preferences.translation_overlay_opacity = self.translation_overlay_opacity;
+        self.app_preferences.translation_font_size_preset =
+            self.translation_overlay_font_size_preset.clone();
+        self.app_preferences.translation_anchor_position_preset =
+            self.translation_overlay_anchor_position_preset.clone();
+        self.save_app_preferences_only(cx);
+    }
+
     fn normalize_transcript_file_name(input: &str) -> String {
         let trimmed = input.trim();
         let fallback = "transcript.md";
@@ -17079,14 +17435,11 @@ impl TTSScreen {
     }
 
     fn translation_brand_title(&self) -> &'static str {
-        self.tr("很Local 实时翻译", "Hen Local Translator")
+        self.tr("很LOCAL / 实时翻译", "HEN LOCAL / LIVE TRANSLATION")
     }
 
     fn translation_brand_tagline(&self) -> &'static str {
-        self.tr(
-            "完全离线本地实时翻译 · 隐私优先 · Powered by OminiX MLX",
-            "Fully offline live translation · Private by design · Powered by OminiX MLX",
-        )
+        self.tr("离线 • 私密 • 本地处理", "OFFLINE • PRIVATE • LOCAL")
     }
 
     fn stop_spoken_translation_output(&mut self) {
@@ -17122,6 +17475,11 @@ impl TTSScreen {
         self.view
             .button(ids!(app_layout.sidebar.sidebar_footer.global_settings_btn))
             .set_text(cx, self.tr("⚙", "⚙"));
+        self.view
+            .button(ids!(
+                content_wrapper.main_content.left_column.content_area.translation_page.page_header.translation_quick_controls.translation_settings_btn
+            ))
+            .set_text(cx, self.tr("设置", "SETTINGS"));
 
         self.view
             .label(ids!(
@@ -17156,61 +17514,9 @@ impl TTSScreen {
                     .translation_page
                     .page_header
                     .translation_quick_controls
-                    .translation_language_controls
-                    .quick_lang_en_btn
-            ))
-            .set_text(cx, "EN");
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_language_controls
-                    .quick_lang_zh_btn
-            ))
-            .set_text(cx, "中文");
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
                     .open_transcript_history_btn
             ))
-            .set_text(cx, self.tr("打开转录记录", "Open Transcript History"));
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-                    .quick_theme_light_btn
-            ))
-            .set_text(cx, self.tr("浅色", "Light"));
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-                    .quick_theme_dark_btn
-            ))
-            .set_text(cx, self.tr("深色", "Dark"));
+            .set_text(cx, self.tr("转录记录", "TRANSCRIPT HISTORY"));
         self.view
             .label(ids!(
                 content_wrapper
@@ -17240,6 +17546,11 @@ impl TTSScreen {
             .set_text(cx, self.tr("语言与音频", "Language & Audio"));
         self.view
             .label(ids!(
+                content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.route_card.row_title_audio.row_title_audio_label
+            ))
+            .set_text(cx, self.tr("语言与音频", "LANGUAGE & AUDIO"));
+        self.view
+            .label(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -17253,6 +17564,11 @@ impl TTSScreen {
                     .subtitle_window_title
             ))
             .set_text(cx, self.tr("字幕窗口", "Subtitle Window"));
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.subtitle_options_primary_row.row_title_subtitle.row_title_subtitle_label
+            ))
+            .set_text(cx, self.tr("字幕窗口", "SUBTITLE WINDOW"));
         self.view
             .label(ids!(
                 content_wrapper
@@ -17290,6 +17606,11 @@ impl TTSScreen {
                     .section_voice_title
             ))
             .set_text(cx, self.tr("语音同传", "Voice Interpretation"));
+        self.view
+            .label(ids!(
+                content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.settings_side_panel.voice_settings_card.section_voice.row_title_voice.row_title_voice_label
+            ))
+            .set_text(cx, self.tr("语音同传", "SPOKEN TRANSLATION"));
         self.view
             .label(ids!(
                 content_wrapper
@@ -17436,22 +17757,6 @@ impl TTSScreen {
                     .settings_card
                     .route_column
                     .subtitle_options_row
-                    .setting_row_footer_font_size
-                    .translation_footer_font_size_label
-            ))
-            .set_text(cx, self.tr("底部标语", "Footer Size"));
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .route_column
-                    .subtitle_options_row
                     .setting_row_overlay
                     .translation_overlay_style_label
             ))
@@ -17520,7 +17825,7 @@ impl TTSScreen {
                     .setting_row_overlay
                     .overlay_style_full
             ))
-            .set_text(cx, self.tr("全屏窗", "Full Window"));
+            .set_text(cx, self.tr("全屏窗", "Fullscreen"));
         self.view
             .label(ids!(
                 content_wrapper
@@ -17568,7 +17873,7 @@ impl TTSScreen {
                     .setting_row_view_style
                     .view_style_classic
             ))
-            .set_text(cx, self.tr("对照", "Classic"));
+            .set_text(cx, self.tr("对照", "Bilingual"));
         self.view
             .label(ids!(
                 content_wrapper
@@ -17675,48 +17980,7 @@ impl TTSScreen {
                     "Experimental · Reads final translations",
                 ),
             );
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .settings_side_panel
-                    .voice_settings_card
-                    .voice_support_note
-            ))
-            .set_text(
-                cx,
-                self.tr(
-                    "本地 Qwen 音色 · 可直接试听",
-                    "Local Qwen voices · Preview in list",
-                ),
-            );
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .settings_side_panel
-                    .privacy_status_card
-                    .privacy_status_label
-            ))
-            .set_text(
-                cx,
-                self.tr(
-                    "默认离线，本地处理，隐私优先",
-                    "Offline and private by default",
-                ),
-            );
+        self.update_translation_secondary_settings_visibility(cx);
         self.update_translation_action_button(cx);
         #[cfg(target_os = "macos")]
         self.view
@@ -17730,8 +17994,7 @@ impl TTSScreen {
         self.update_translation_settings_layout_for_locale(cx);
         self.update_translation_lang_dropdowns(cx);
         self.update_translation_overlay_style_buttons(cx);
-        self.update_translation_font_size_dropdown(cx);
-        self.update_translation_footer_font_size_dropdown(cx);
+        self.update_translation_font_size_control(cx);
         self.update_translation_anchor_position_dropdown(cx);
         self.populate_translation_input_dropdown(cx);
         self.update_translation_opacity_dropdown(cx);
@@ -23008,9 +23271,9 @@ impl TTSScreen {
     /// current running state and active locale.
     fn update_translation_action_button(&mut self, cx: &mut Cx) {
         let label = if self.translation_running {
-            self.tr("停止翻译", "Stop Translation")
+            self.tr("停止翻译", "STOP TRANSLATION")
         } else {
-            self.tr("启动实时翻译", "Start Live Translation")
+            self.tr("启动实时翻译", "START LIVE TRANSLATION")
         };
         let btn = self.view.button(ids!(
             content_wrapper
@@ -23298,6 +23561,119 @@ impl TTSScreen {
         self.update_spoken_translation_output_dropdown(cx);
         self.update_spoken_translation_voice_dropdown(cx);
         self.update_spoken_translation_settings_enabled_state(cx);
+        self.update_translation_secondary_settings_visibility(cx);
+    }
+
+    fn update_translation_secondary_settings_visibility(&mut self, cx: &mut Cx) {
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .subtitle_options_secondary_row
+            ))
+            .set_visible(cx, self.translation_subtitle_advanced_open);
+        self.view
+            .button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .subtitle_advanced_toggle_btn
+            ))
+            .set_text(
+                cx,
+                self.tr(
+                    if self.translation_subtitle_advanced_open {
+                        "收起高级字幕设置"
+                    } else {
+                        "显示高级字幕设置"
+                    },
+                    if self.translation_subtitle_advanced_open {
+                        "Hide advanced subtitle settings"
+                    } else {
+                        "Show advanced subtitle settings"
+                    },
+                ),
+            );
+
+        let spoken_enabled = self.app_preferences.experimental_spoken_translation_enabled;
+        if !spoken_enabled {
+            self.translation_voice_settings_open = false;
+        }
+        let show_voice_details = spoken_enabled && self.translation_voice_settings_open;
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .settings_side_panel
+                    .voice_settings_card
+                    .setting_row_spoken_output
+            ))
+            .set_visible(cx, show_voice_details);
+        self.view
+            .view(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .settings_side_panel
+                    .voice_settings_card
+                    .setting_row_spoken_voice
+            ))
+            .set_visible(cx, show_voice_details);
+        let details_btn = self.view.button(ids!(
+            content_wrapper
+                .main_content
+                .left_column
+                .content_area
+                .translation_page
+                .translation_body
+                .translation_settings_panel
+                .settings_card
+                .settings_side_panel
+                .voice_settings_card
+                .spoken_details_toggle_btn
+        ));
+        details_btn.set_enabled(cx, spoken_enabled);
+        details_btn.set_text(
+            cx,
+            self.tr(
+                if show_voice_details {
+                    "收起音色与设备"
+                } else {
+                    "显示音色与设备"
+                },
+                if show_voice_details {
+                    "Hide voice and device"
+                } else {
+                    "Show voice and device"
+                },
+            ),
+        );
     }
 
     fn update_spoken_translation_toggle_buttons(&mut self, cx: &mut Cx) {
@@ -24224,17 +24600,9 @@ impl TTSScreen {
             .set_selected_item(cx, idx);
     }
 
-    fn update_translation_font_size_dropdown(&mut self, cx: &mut Cx) {
-        let presets = [
-            "16", "20", "24", "30", "36", "44", "52", "64", "80", "96", "120", "160",
-        ];
-        let labels: Vec<String> = presets.iter().map(|p| format!("{}pt", p)).collect();
-        let idx = presets
-            .iter()
-            .position(|p| *p == self.translation_overlay_font_size_preset)
-            .unwrap_or(2);
+    fn update_translation_font_size_control(&mut self, cx: &mut Cx) {
         self.view
-            .bounded_drop_down(ids!(
+            .label(ids!(
                 content_wrapper
                     .main_content
                     .left_column
@@ -24246,52 +24614,13 @@ impl TTSScreen {
                     .route_column
                     .subtitle_options_row
                     .setting_row_font_size
-                    .font_size_dropdown
+                    .font_size_stepper
+                    .font_size_value
             ))
-            .set_labels(cx, labels);
-        self.view
-            .bounded_drop_down(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .route_column
-                    .subtitle_options_row
-                    .setting_row_font_size
-                    .font_size_dropdown
-            ))
-            .set_selected_item(cx, idx);
-    }
-
-    fn update_translation_footer_font_size_dropdown(&mut self, cx: &mut Cx) {
-        let presets = [
-            "8", "10", "12", "14", "16", "18", "20", "22", "24", "26", "28", "30", "32",
-        ];
-        let labels: Vec<String> = presets.iter().map(|p| format!("{}pt", p)).collect();
-        let idx = presets
-            .iter()
-            .position(|p| *p == self.translation_overlay_footer_font_size_preset)
-            .unwrap_or(6); // default 20pt
-        let dd = self.view.bounded_drop_down(ids!(
-            content_wrapper
-                .main_content
-                .left_column
-                .content_area
-                .translation_page
-                .translation_body
-                .translation_settings_panel
-                .settings_card
-                .route_column
-                .subtitle_options_row
-                .setting_row_footer_font_size
-                .footer_font_size_dropdown
-        ));
-        dd.set_labels(cx, labels);
-        dd.set_selected_item(cx, idx);
+            .set_text(
+                cx,
+                &format!("{} pt", self.translation_overlay_font_size_preset),
+            );
     }
 
     fn linked_footer_font_size_preset(font_size_preset: &str) -> &'static str {
@@ -24420,6 +24749,17 @@ impl TTSScreen {
             }
         }
         self.translation_audio_devices = names;
+
+        self.translation_device_idx = match self.app_preferences.translation_input_device.as_str() {
+            "__system_audio__" => 0,
+            "__default_microphone__" => 1,
+            device => self
+                .translation_audio_devices
+                .iter()
+                .position(|name| name == device)
+                .map(|idx| idx + 2)
+                .unwrap_or(1),
+        };
 
         // Index 0 = System Audio, 1 = System Default Mic, 2..N = CPAL devices
         let mut labels = vec![
@@ -26335,44 +26675,6 @@ impl TTSScreen {
 
         self.view
             .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_language_controls
-                    .quick_lang_en_btn
-            ))
-            .apply_over(
-                cx,
-                live! {
-                    draw_bg: { active: (en_active), dark_mode: (dark_mode) }
-                    draw_text: { active: (en_active), dark_mode: (dark_mode) }
-                },
-            );
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_language_controls
-                    .quick_lang_zh_btn
-            ))
-            .apply_over(
-                cx,
-                live! {
-                    draw_bg: { active: (zh_active), dark_mode: (dark_mode) }
-                    draw_text: { active: (zh_active), dark_mode: (dark_mode) }
-                },
-            );
-        self.view
-            .button(ids!(
                 global_settings_modal
                     .settings_dialog
                     .settings_content
@@ -26456,44 +26758,6 @@ impl TTSScreen {
         let dark_active = if self.dark_mode >= 0.5 { 1.0 } else { 0.0 };
         let dark_mode = self.dark_mode;
 
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-                    .quick_theme_light_btn
-            ))
-            .apply_over(
-                cx,
-                live! {
-                    draw_bg: { active: (light_active), dark_mode: (dark_mode) }
-                    draw_text: { active: (light_active), dark_mode: (dark_mode) }
-                },
-            );
-        self.view
-            .button(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-                    .quick_theme_dark_btn
-            ))
-            .apply_over(
-                cx,
-                live! {
-                    draw_bg: { active: (dark_active), dark_mode: (dark_mode) }
-                    draw_text: { active: (dark_active), dark_mode: (dark_mode) }
-                },
-            );
         self.view
             .button(ids!(
                 global_settings_modal
@@ -27462,6 +27726,97 @@ impl TTSScreen {
     fn apply_dark_mode(&mut self, cx: &mut Cx) {
         let dark_mode = self.dark_mode;
 
+        for button in [
+            self.view.button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .page_header
+                    .translation_quick_controls
+                    .translation_settings_btn
+            )),
+            self.view.button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .subtitle_advanced_toggle_btn
+            )),
+            self.view.button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .settings_side_panel
+                    .voice_settings_card
+                    .spoken_details_toggle_btn
+            )),
+            self.view.button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_font_size
+                    .font_size_stepper
+                    .font_size_decrease_btn
+            )),
+            self.view.button(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_font_size
+                    .font_size_stepper
+                    .font_size_increase_btn
+            )),
+        ] {
+            button.apply_over(
+                cx,
+                live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } },
+            );
+        }
+        self.view
+            .label(ids!(
+                content_wrapper
+                    .main_content
+                    .left_column
+                    .content_area
+                    .translation_page
+                    .translation_body
+                    .translation_settings_panel
+                    .settings_card
+                    .route_column
+                    .subtitle_options_row
+                    .setting_row_font_size
+                    .font_size_stepper
+                    .font_size_value
+            ))
+            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
+
         // Apply to main layout
         self.view
             .view(ids!(content_wrapper))
@@ -27536,30 +27891,6 @@ impl TTSScreen {
                     .char_count
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_language_controls
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
-        self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .page_header
-                    .translation_quick_controls
-                    .translation_theme_controls
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
         self.view
             .label(ids!(
                 content_wrapper
@@ -27664,21 +27995,6 @@ impl TTSScreen {
                     .voice_settings_card
                     .setting_row_spoken_voice
                     .spoken_voice_label
-            ))
-            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .settings_side_panel
-                    .voice_settings_card
-                    .voice_support_note
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
@@ -27938,20 +28254,6 @@ impl TTSScreen {
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
         self.view
-            .view(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .settings_side_panel
-                    .privacy_status_card
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } });
-        self.view
             .button(ids!(
                 content_wrapper
                     .main_content
@@ -28139,21 +28441,6 @@ impl TTSScreen {
                     .voice_settings_card
                     .section_voice
                     .voice_note
-            ))
-            .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
-        self.view
-            .label(ids!(
-                content_wrapper
-                    .main_content
-                    .left_column
-                    .content_area
-                    .translation_page
-                    .translation_body
-                    .translation_settings_panel
-                    .settings_card
-                    .settings_side_panel
-                    .privacy_status_card
-                    .privacy_status_label
             ))
             .apply_over(cx, live! { draw_text: { dark_mode: (dark_mode) } });
         self.view
@@ -28398,16 +28685,6 @@ impl TTSScreen {
             ))
             .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.update_spoken_translation_voice_dropdown(cx);
-        self.view
-            .bounded_drop_down(ids!(
-                content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_font_size.font_size_dropdown
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
-        self.view
-            .bounded_drop_down(ids!(
-                content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_footer_font_size.footer_font_size_dropdown
-            ))
-            .apply_over(cx, live! { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } popup_menu: { draw_bg: { dark_mode: (dark_mode) } menu_item: { draw_bg: { dark_mode: (dark_mode) } draw_text: { dark_mode: (dark_mode) } } } });
         self.view
             .bounded_drop_down(ids!(
                 content_wrapper.main_content.left_column.content_area.translation_page.translation_body.translation_settings_panel.settings_card.route_column.subtitle_options_row.setting_row_anchor_position.anchor_position_dropdown

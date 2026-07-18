@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permissions for the translator control and subtitle windows",
+  "windows": ["main", "overlay"],
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
+}
