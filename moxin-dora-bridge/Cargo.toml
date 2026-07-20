@@ -3,7 +3,7 @@ name = "moxin-dora-bridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Modular Dora bridge for Moxin widgets - each widget connects as separate dynamic node"
+description = "Dora runtime bridge for Hen Local Translator"
 
 [dependencies]
 # Dora

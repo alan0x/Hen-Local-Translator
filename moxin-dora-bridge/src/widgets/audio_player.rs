@@ -165,11 +165,6 @@ pub struct AudioPlayerBridge {
 }
 
 impl AudioPlayerBridge {
-    /// Create a new audio player bridge (legacy - without shared state)
-    pub fn new(node_id: &str) -> Self {
-        Self::with_shared_state(node_id, None)
-    }
-
     /// Create a new audio player bridge with shared state
     pub fn with_shared_state(node_id: &str, shared_state: Option<Arc<SharedDoraState>>) -> Self {
         let (buffer_tx, buffer_rx) = bounded(10);
@@ -652,7 +647,7 @@ impl AudioPlayerBridge {
                 .as_any()
                 .downcast_ref::<Int16Array>()
                 .map(|arr| arr.values().iter().map(|&x| x as f32 / 32768.0).collect())?,
-            // Handle ListArray<Float32> - primespeech sends pa.array([audio_array])
+            // Accept nested numeric arrays from compatible Dora audio producers.
             DataType::List(_) | DataType::LargeList(_) => {
                 debug!("Audio data is ListArray, extracting inner array");
 

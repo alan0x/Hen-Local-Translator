@@ -6,6 +6,7 @@ export type LanguageCode = 'zh' | 'en' | 'ja' | 'fr' | 'none';
 
 export interface TranslationSettings {
   appLanguage: 'zh' | 'en';
+  accentTheme: AccentTheme;
   sourceLanguage: LanguageCode;
   targetLanguage: LanguageCode;
   inputDevice: string;
@@ -52,13 +53,17 @@ export interface OverlayState {
   subtitleSplit: boolean;
   fontSize: number;
   anchorPosition: number;
+  accentTheme: AccentTheme;
   history: Sentence[];
   pendingSourceText: string;
 }
 
+export type AccentTheme = 'neon-blue' | 'neon-orange' | 'neon-pink' | 'neon-green';
+
 export const previewSettings: SettingsPayload = {
   settings: {
     appLanguage: 'zh',
+    accentTheme: 'neon-blue',
     sourceLanguage: 'zh',
     targetLanguage: 'en',
     inputDevice: '__system_audio__',
@@ -91,6 +96,7 @@ export const previewOverlay: OverlayState = {
   subtitleSplit: true,
   fontSize: 24,
   anchorPosition: 50,
+  accentTheme: 'neon-blue',
   history: [
     {
       sourceText: '这是一段用于调整字幕大小和布局的测试内容。',

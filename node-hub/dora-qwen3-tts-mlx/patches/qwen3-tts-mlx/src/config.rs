@@ -97,8 +97,12 @@ pub struct SpeakerEncoderJsonConfig {
     pub sample_rate: u32,
 }
 
-fn default_enc_dim() -> i32 { 2048 }
-fn default_speaker_sample_rate() -> u32 { 24000 }
+fn default_enc_dim() -> i32 {
+    2048
+}
+fn default_speaker_sample_rate() -> u32 {
+    24000
+}
 
 impl Qwen3TtsConfig {
     pub fn load(model_dir: &Path) -> Result<Self> {
@@ -107,7 +111,9 @@ impl Qwen3TtsConfig {
     }
 
     pub fn quant_config(&self) -> Option<&QuantizationConfig> {
-        self.quantization.as_ref().or(self.quantization_config.as_ref())
+        self.quantization
+            .as_ref()
+            .or(self.quantization_config.as_ref())
     }
 
     /// Detect the model type from config.
@@ -126,9 +132,15 @@ pub struct QuantizationConfig {
     pub mode: String,
 }
 
-fn default_group_size() -> i32 { 64 }
-fn default_bits() -> i32 { 8 }
-fn default_mode() -> String { "affine".to_string() }
+fn default_group_size() -> i32 {
+    64
+}
+fn default_bits() -> i32 {
+    8
+}
+fn default_mode() -> String {
+    "affine".to_string()
+}
 
 // ============================================================================
 // Talker config
@@ -255,7 +267,9 @@ pub struct DecoderConfig {
     pub layer_scale_initial_scale: f32,
 }
 
-fn default_layer_scale() -> f32 { 0.01 }
+fn default_layer_scale() -> f32 {
+    0.01
+}
 
 // ============================================================================
 // Generation config
@@ -322,10 +336,24 @@ impl Default for GenerationConfig {
     }
 }
 
-fn default_true() -> bool { true }
-fn default_temp() -> f32 { 0.9 }
-fn default_top_k() -> i32 { 50 }
-fn default_top_p() -> f32 { 1.0 }
-fn default_rep_penalty() -> f32 { 1.05 }
-fn default_max_tokens() -> i32 { 2048 }
-fn default_speed() -> f32 { 1.0 }
+fn default_true() -> bool {
+    true
+}
+fn default_temp() -> f32 {
+    0.9
+}
+fn default_top_k() -> i32 {
+    50
+}
+fn default_top_p() -> f32 {
+    1.0
+}
+fn default_rep_penalty() -> f32 {
+    1.05
+}
+fn default_max_tokens() -> i32 {
+    2048
+}
+fn default_speed() -> f32 {
+    1.0
+}

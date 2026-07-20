@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hen Local Translator",
+  "productName": "Hen Local Live Translator",
   "version": "1.1.0",
   "identifier": "com.henlocal.translator",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Hen Local Translator",
+        "title": "Hen Local Live Translator",
         "url": "index.html",
         "width": 1180,
         "height": 640,
@@ -32,16 +32,26 @@
     "active": true,
     "targets": "all",
     "icon": [
-      "icons/icon.png"
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ],
     "resources": [
-      "../apps/hen-local-translator/dataflow/translation_qwen35.yml",
+      "dataflow/translation_qwen35.yml",
       "../node-hub/dora-qwen3-tts-mlx/previews/vivian.wav",
       "../node-hub/dora-qwen3-tts-mlx/previews/serena.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/baiyang.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/yangyang.wav",
       "../node-hub/dora-qwen3-tts-mlx/previews/ryan.wav",
       "../node-hub/dora-qwen3-tts-mlx/previews/aiden.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/maple.wav",
+      "../node-hub/dora-qwen3-tts-mlx/previews/juniper.wav",
       "../node-hub/dora-qwen3-tts-mlx/voices/baiyang/ref.wav",
-      "../node-hub/dora-qwen3-tts-mlx/voices/yangyang/ref.wav"
+      "../node-hub/dora-qwen3-tts-mlx/voices/yangyang/ref.wav",
+      "../node-hub/dora-qwen3-tts-mlx/voices/maple/ref.wav",
+      "../node-hub/dora-qwen3-tts-mlx/voices/juniper/ref.wav"
     ]
   }
 }

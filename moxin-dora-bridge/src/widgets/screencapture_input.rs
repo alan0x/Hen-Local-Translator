@@ -13,7 +13,7 @@ use screencapturekit::prelude::*;
 use screencapturekit::stream::output_type::SCStreamOutputType;
 use std::sync::atomic::{AtomicI8, Ordering};
 use std::sync::{Arc, Mutex};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 /// -1 = not yet probed, 0 = denied/unavailable, 1 = granted
 static PERMISSION_STATUS: AtomicI8 = AtomicI8::new(-1);
@@ -146,7 +146,7 @@ impl ScreenCaptureInput {
 
     /// Stop the capture stream.
     pub fn stop(&mut self) {
-        if let Some(mut stream) = self.stream.take() {
+        if let Some(stream) = self.stream.take() {
             if let Err(e) = stream.stop_capture() {
                 warn!("[ScreenCaptureInput] stop_capture error: {e:?}");
             }
@@ -157,11 +157,6 @@ impl ScreenCaptureInput {
         if let Ok(mut buf) = self.audio_buffer.lock() {
             buf.clear();
         }
-    }
-
-    /// Returns `true` if the capture is active.
-    pub fn is_recording(&self) -> bool {
-        self.is_recording
     }
 
     /// Drain all available samples from the internal buffer.

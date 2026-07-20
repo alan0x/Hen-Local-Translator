@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import logoUrl from '../../icons/icon.png';
+  import logoUrl from '../../icons/logo-mark.png';
   import {
     getSettings,
     listenRuntime,
@@ -11,6 +11,7 @@
     stopTranslation,
     toggleSubtitlePreview,
     updateSettings,
+    type AccentTheme,
     type RuntimeState,
     type SettingsPayload,
     type TranslationSettings
@@ -33,6 +34,12 @@
     { id: 'maple', language: 'en', zh: 'Maple', en: 'Maple' },
     { id: 'juniper', language: 'en', zh: 'Juniper', en: 'Juniper' }
   ] as const;
+  const accentThemes: Array<{ id: AccentTheme; zh: string; en: string; color: string }> = [
+    { id: 'neon-blue', zh: '电光蓝', en: 'BLUE', color: '#0003FE' },
+    { id: 'neon-orange', zh: '霓虹橙', en: 'ORANGE', color: '#FF5705' },
+    { id: 'neon-pink', zh: '霓虹粉', en: 'PINK', color: '#FF0073' },
+    { id: 'neon-green', zh: '霓虹绿', en: 'GREEN', color: '#51F91B' }
+  ];
 
   let payload: SettingsPayload | null = null;
   let settings: TranslationSettings | null = null;
@@ -50,6 +57,19 @@
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
+  const appDisplayName = () => tr('很 Local 实时翻译', 'Hen Local Live Translator');
+
+  function applyAccentTheme(theme: AccentTheme): void {
+    document.documentElement.dataset.accentTheme = theme;
+  }
+
+  async function selectAccentTheme(theme: AccentTheme): Promise<void> {
+    if (!settings) return;
+    settings.accentTheme = theme;
+    settings = { ...settings };
+    applyAccentTheme(theme);
+    await persist();
+  }
 
   function languageName(code: string): string {
     if (code === 'none') return tr('不翻译', 'No translation');
@@ -148,7 +168,7 @@
     }
   }
 
-  async function setVoiceReturn(enabled: boolean): Promise<void> {
+  async function setSpokenTranslation(enabled: boolean): Promise<void> {
     if (!settings) return;
     if (!enabled) await stopVoicePreview();
     settings.spokenTranslationEnabled = enabled;
@@ -203,11 +223,19 @@
     runtimeMessage = state.message;
   }
 
+  function runtimeDisplayMessage(): string {
+    if (runtimeStatus === 'error') return runtimeMessage;
+    if (runtimeStatus === 'listening') return tr('实时翻译进行中', 'Live translation active');
+    if (runtimeStatus === 'warming') return tr('正在启动本地翻译…', 'Starting local translation…');
+    return tr('本地 AI 已就绪', 'Local AI is ready');
+  }
+
   onMount(() => {
     let unlisten: () => void = () => undefined;
     void getSettings().then((data) => {
       payload = data;
       settings = { ...data.settings };
+      applyAccentTheme(settings.accentTheme);
       subtitlePreviewVisible = data.subtitlePreviewVisible;
       if (syncVoiceToTarget()) {
         settings = { ...settings };
@@ -229,28 +257,39 @@
 </script>
 
 <svelte:head>
-  <title>Hen Local Translator</title>
+  <title>{appDisplayName()}</title>
 </svelte:head>
 
 {#if settings && payload}
   <main class="app-shell">
     <header class="topbar">
       <div class="brand">
-        <img class="brand-logo" src={logoUrl} alt="" />
-        <div>
-          <h1>{tr('很LOCAL / 实时翻译', 'HEN LOCAL / LIVE TRANSLATION')}</h1>
+        <span class="brand-logo-tile"><span class="brand-logo" style={`--brand-mark:url("${logoUrl}")`} aria-hidden="true"></span></span>
+        <div class="brand-copy">
+          <h1>{tr('很 LOCAL 实时翻译', 'HEN LOCAL LIVE TRANSLATOR')}</h1>
           <p>{tr('离线 · 私密 · 本地处理', 'OFFLINE · PRIVATE · ON-DEVICE')}</p>
         </div>
       </div>
       <div class="header-actions">
         <div class:active={runtimeStatus === 'listening'} class="status-line">
           <span></span>{tr(
-            runtimeStatus === 'listening' ? '正在聆听' : runtimeStatus === 'warming' ? '正在准备' : '本地 AI 就绪',
-            runtimeStatus === 'listening' ? 'LISTENING' : runtimeStatus === 'warming' ? 'WARMING UP' : 'LOCAL AI READY'
+            runtimeStatus === 'listening' ? '翻译中' : runtimeStatus === 'warming' ? '正在准备' : '本地 AI 就绪',
+            runtimeStatus === 'listening' ? 'TRANSLATING' : runtimeStatus === 'warming' ? 'WARMING UP' : 'LOCAL AI READY'
           )}
         </div>
         <button class="outline-button" on:click={() => openTranscriptHistory()}>{tr('转录记录', 'TRANSCRIPTS')}</button>
-        <button class="outline-button square" aria-label={tr('设置', 'Settings')} on:click={() => appSettingsOpen = true}>设置</button>
+        <button
+          class="outline-button square settings-button"
+          aria-label={tr('设置', 'Settings')}
+          title={tr('设置', 'Settings')}
+          on:click={() => appSettingsOpen = true}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h3M11 7h9M4 17h9M17 17h3"></path>
+            <circle cx="9" cy="7" r="2"></circle>
+            <circle cx="15" cy="17" r="2"></circle>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -263,7 +302,7 @@
         </div>
         <div class="row-controls route-controls">
           <label class="route-field">
-            <span class="route-heading"><strong>{tr('原语言', 'SOURCE LANGUAGE')}</strong></span>
+            <span class="route-heading"><strong>{tr('源语言', 'SOURCE LANGUAGE')}</strong></span>
             <select bind:value={settings.sourceLanguage} on:change={persist}>
               {#each languages as language}
                 <option value={language.code}>{isEnglish() ? language.en : language.zh}</option>
@@ -305,7 +344,7 @@
             <span class="control-label">{tr('窗口模式', 'WINDOW MODE')}</span>
             <div class="segmented two">
               <button class:active={!settings.overlayFullscreen} on:click={async () => { settings!.overlayFullscreen = false; settings = { ...settings! }; await persist(); }}>{tr('浮窗', 'FLOAT')}</button>
-              <button class:active={settings.overlayFullscreen} on:click={async () => { settings!.overlayFullscreen = true; settings = { ...settings! }; await persist(); }}>{tr('全屏窗', 'LARGE')}</button>
+              <button class:active={settings.overlayFullscreen} on:click={async () => { settings!.overlayFullscreen = true; settings = { ...settings! }; await persist(); }}>{tr('全屏', 'FULLSCREEN')}</button>
             </div>
           </div>
 
@@ -341,20 +380,20 @@
       <div class="grid-row voice-row">
         <div class="row-number">03</div>
         <div class="row-title">
-          <strong>{tr('语音回传', 'VOICE RETURN')}</strong>
-          <span>{tr('音色与设备设置', 'VOICE + DEVICE SETTINGS')}</span>
+          <strong>{tr('译文播报', 'SPOKEN TRANSLATION')}</strong>
+          <span>{tr('音色与输出设备', 'VOICE + OUTPUT')}</span>
         </div>
         <div class="row-controls voice-controls">
           <div class="control-block voice-toggle-control">
-            <span class="control-label">{tr('回传开关', 'VOICE OUTPUT')}</span>
+            <span class="control-label">{tr('播报开关', 'SPEECH OUTPUT')}</span>
             <div class="segmented two">
-              <button class:active={!settings.spokenTranslationEnabled} on:click={() => setVoiceReturn(false)}>{tr('关', 'OFF')}</button>
-              <button class:active={settings.spokenTranslationEnabled} on:click={() => setVoiceReturn(true)}>{tr('开', 'ON')}</button>
+              <button class:active={!settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(false)}>{tr('关', 'OFF')}</button>
+              <button class:active={settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(true)}>{tr('开', 'ON')}</button>
             </div>
           </div>
 
           <div class:is-disabled={!settings.spokenTranslationEnabled} class="control-block voice-picker-control">
-            <span class="control-label">{tr('朗读音色', 'VOICE')} · {languageName(settings.targetLanguage)}</span>
+            <span class="control-label">{tr('播报音色', 'VOICE')} · {languageName(settings.targetLanguage)}</span>
             <div class="voice-picker-row">
               <select disabled={!settings.spokenTranslationEnabled} bind:value={settings.spokenTranslationVoice} on:change={selectSpokenVoice}>
                 {#each voicesForTarget(settings.targetLanguage) as voice}
@@ -382,7 +421,7 @@
       <div class="launch-meta">
         <span>{languageName(settings.sourceLanguage)} → {languageName(settings.targetLanguage)}</span>
         <span>{deviceName(settings.inputDevice)}</span>
-        {#if errorMessage}<strong class="error">{errorMessage}</strong>{:else}<span>{runtimeMessage}</span>{/if}
+        {#if errorMessage}<strong class="error">{errorMessage}</strong>{:else}<span>{runtimeDisplayMessage()}</span>{/if}
       </div>
       <button class:running class="launch-button" disabled={busy} on:click={toggleTranslation}>
         <span>{running ? '■' : '▶'}</span>
@@ -413,10 +452,27 @@
       <dialog open class="modal small-modal" aria-label={tr('设置', 'Settings')}>
         <header><div><span>SYS</span><h2>{tr('应用设置', 'APPLICATION')}</h2></div><button on:click={() => appSettingsOpen = false}>×</button></header>
         <div class="modal-field"><span>{tr('界面语言', 'INTERFACE LANGUAGE')}</span><div class="segmented two language-toggle"><button class:active={settings.appLanguage === 'zh'} on:click={async () => { settings!.appLanguage = 'zh'; settings = { ...settings! }; await persist(); }}>中文</button><button class:active={settings.appLanguage === 'en'} on:click={async () => { settings!.appLanguage = 'en'; settings = { ...settings! }; await persist(); }}>EN</button></div></div>
+        <div class="modal-field theme-field">
+          <span>{tr('主题颜色', 'ACCENT THEME')}</span>
+          <div class="theme-options">
+            {#each accentThemes as theme}
+              <button
+                class:active={settings.accentTheme === theme.id}
+                aria-label={isEnglish() ? theme.en : theme.zh}
+                title={isEnglish() ? theme.en : theme.zh}
+                style={`--theme-swatch:${theme.color}`}
+                on:click={() => selectAccentTheme(theme.id)}
+              >
+                <span class="theme-swatch"><span class="theme-mark" style={`--brand-mark:url("${logoUrl}")`}></span></span>
+                <small>{isEnglish() ? theme.en : theme.zh}</small>
+              </button>
+            {/each}
+          </div>
+        </div>
         <p class="privacy-note">{tr('语音、字幕和偏好设置均保留在本机。', 'Audio, subtitles, and preferences remain on this device.')}</p>
       </dialog>
     </div>
   {/if}
 {:else}
-  <main class="loading-screen"><img class="brand-logo" src={logoUrl} alt="" /><p>LOADING LOCAL TRANSLATOR</p></main>
+  <main class="loading-screen"><span class="brand-logo-tile"><span class="brand-logo" style={`--brand-mark:url("${logoUrl}")`} aria-hidden="true"></span></span><p>LOADING LOCAL TRANSLATOR</p></main>
 {/if}

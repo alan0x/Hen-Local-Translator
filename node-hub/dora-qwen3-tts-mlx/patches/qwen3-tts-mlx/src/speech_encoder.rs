@@ -13,12 +13,12 @@
 
 use std::collections::HashMap;
 
-use mlx_rs::{array, Array};
 use mlx_rs::module::{Module, Param};
 use mlx_rs::nn;
 use mlx_rs::ops;
 use mlx_rs::ops::indexing::IndexOp;
 use mlx_rs::transforms::eval;
+use mlx_rs::{array, Array};
 
 use crate::error::{Error, Result};
 
@@ -92,8 +92,8 @@ impl CausalConv1d {
 /// Residual block in the SEANet encoder.
 /// Two convolutions with optional dimension change + skip connection.
 struct EncoderResBlock {
-    conv1: CausalConv1d, // bottleneck: C → C/2, k=3
-    conv2: CausalConv1d, // expand: C/2 → C, k=1
+    conv1: CausalConv1d,            // bottleneck: C → C/2, k=3
+    conv2: CausalConv1d,            // expand: C/2 → C, k=1
     shortcut: Option<CausalConv1d>, // if input/output dims differ
 }
 
@@ -160,8 +160,8 @@ struct EncoderTransformerLayer {
     o_proj: Array,
     self_attn_layer_scale: Array, // [D]
     post_attention_layernorm: AffineLayerNorm,
-    fc1: Array, // [4D, D]
-    fc2: Array, // [D, 4D]
+    fc1: Array,             // [4D, D]
+    fc2: Array,             // [D, 4D]
     mlp_layer_scale: Array, // [D]
     num_heads: i32,
     head_dim: i32,
@@ -189,9 +189,15 @@ impl EncoderTransformerLayer {
         let t_usize = t as usize;
 
         // Q, K, V projections
-        let mut q = ops::matmul(x, &self.q_proj.t())?.reshape(&[b, t, self.num_heads, self.head_dim])?.transpose_axes(&[0, 2, 1, 3])?;
-        let mut k = ops::matmul(x, &self.k_proj.t())?.reshape(&[b, t, self.num_heads, self.head_dim])?.transpose_axes(&[0, 2, 1, 3])?;
-        let v = ops::matmul(x, &self.v_proj.t())?.reshape(&[b, t, self.num_heads, self.head_dim])?.transpose_axes(&[0, 2, 1, 3])?;
+        let mut q = ops::matmul(x, &self.q_proj.t())?
+            .reshape(&[b, t, self.num_heads, self.head_dim])?
+            .transpose_axes(&[0, 2, 1, 3])?;
+        let mut k = ops::matmul(x, &self.k_proj.t())?
+            .reshape(&[b, t, self.num_heads, self.head_dim])?
+            .transpose_axes(&[0, 2, 1, 3])?;
+        let v = ops::matmul(x, &self.v_proj.t())?
+            .reshape(&[b, t, self.num_heads, self.head_dim])?
+            .transpose_axes(&[0, 2, 1, 3])?;
 
         // RoPE (theta=10000, stride-based like Qwen)
         let hd = self.head_dim as usize;
@@ -216,21 +222,26 @@ impl EncoderTransformerLayer {
         let q1 = q.index((.., .., .., ..half as i32));
         let q2 = q.index((.., .., .., half as i32..));
         q = mlx_rs::ops::concatenate_axis(
-            &[&q1.multiply(&cos_arr)?.subtract(&q2.multiply(&sin_arr)?)?,
-              &q2.multiply(&cos_arr)?.add(&q1.multiply(&sin_arr)?)?],
+            &[
+                &q1.multiply(&cos_arr)?.subtract(&q2.multiply(&sin_arr)?)?,
+                &q2.multiply(&cos_arr)?.add(&q1.multiply(&sin_arr)?)?,
+            ],
             -1,
         )?;
         let k1 = k.index((.., .., .., ..half as i32));
         let k2 = k.index((.., .., .., half as i32..));
         k = mlx_rs::ops::concatenate_axis(
-            &[&k1.multiply(&cos_arr)?.subtract(&k2.multiply(&sin_arr)?)?,
-              &k2.multiply(&cos_arr)?.add(&k1.multiply(&sin_arr)?)?],
+            &[
+                &k1.multiply(&cos_arr)?.subtract(&k2.multiply(&sin_arr)?)?,
+                &k2.multiply(&cos_arr)?.add(&k1.multiply(&sin_arr)?)?,
+            ],
             -1,
         )?;
 
         // Scaled dot-product attention
         let scale = (self.head_dim as f32).sqrt();
-        let scores = ops::matmul(&q, &k.transpose_axes(&[0, 1, 3, 2])?)?.multiply(array!(1.0 / scale))?;
+        let scores =
+            ops::matmul(&q, &k.transpose_axes(&[0, 1, 3, 2])?)?.multiply(array!(1.0 / scale))?;
 
         // Causal mask with sliding window (window=250)
         let window = 250usize;
@@ -249,7 +260,9 @@ impl EncoderTransformerLayer {
         let attn_out = ops::matmul(&attn_weights, &v)?;
 
         // Reshape and output projection
-        let attn_out = attn_out.transpose_axes(&[0, 2, 1, 3])?.reshape(&[b, t, -1])?;
+        let attn_out = attn_out
+            .transpose_axes(&[0, 2, 1, 3])?
+            .reshape(&[b, t, -1])?;
         Ok(ops::matmul(&attn_out, &self.o_proj.t())?)
     }
 
@@ -279,7 +292,9 @@ impl RvqCodebook {
         let e_sq = ops::sum_axis(&self.embedding.multiply(&self.embedding)?, -1, true)?; // [1, codebook_size]
         let x_e = ops::matmul(x, &self.embedding.t())?; // [B, T, codebook_size]
 
-        let dists = x_sq.subtract(&x_e.multiply(array!(2.0f32))?)?.add(&e_sq.t())?;
+        let dists = x_sq
+            .subtract(&x_e.multiply(array!(2.0f32))?)?
+            .add(&e_sq.t())?;
 
         // Argmin
         let codes = ops::indexing::argmin_axis(&dists, -1, None)?; // [B, T]
@@ -388,9 +403,9 @@ pub struct SpeechEncoder {
 
 /// Different types of encoder layers in SEANet
 enum EncoderLayer {
-    Conv(CausalConv1d),     // Regular or stride conv
+    Conv(CausalConv1d),        // Regular or stride conv
     ResBlock(EncoderResBlock), // Residual block
-    Elu,                    // ELU activation (between layers)
+    Elu,                       // ELU activation (between layers)
 }
 
 impl SpeechEncoder {
@@ -474,7 +489,13 @@ fn load_conv1d_with_stride_and_pad(
         groups: 1,
     };
 
-    Ok(CausalConv1d { conv, left_pad, kernel_size: effective_kernel, stride, replicate })
+    Ok(CausalConv1d {
+        conv,
+        left_pad,
+        kernel_size: effective_kernel,
+        stride,
+        replicate,
+    })
 }
 
 fn load_encoder_res_block(
@@ -487,12 +508,21 @@ fn load_encoder_res_block(
     let conv2 = load_conv1d_with_stride(weights, &format!("{prefix}.block.3.conv"), 1, 1)?;
 
     let shortcut = if weights.contains_key(&format!("{prefix}.shortcut.conv.weight")) {
-        Some(load_conv1d_with_stride(weights, &format!("{prefix}.shortcut.conv"), 1, 1)?)
+        Some(load_conv1d_with_stride(
+            weights,
+            &format!("{prefix}.shortcut.conv"),
+            1,
+            1,
+        )?)
     } else {
         None
     };
 
-    Ok(EncoderResBlock { conv1, conv2, shortcut })
+    Ok(EncoderResBlock {
+        conv1,
+        conv2,
+        shortcut,
+    })
 }
 
 fn load_affine_layer_norm(
@@ -513,14 +543,17 @@ fn load_encoder_transformer_layer(
 ) -> Result<EncoderTransformerLayer> {
     let head_dim = hidden_dim / num_heads;
 
-    let input_layernorm = load_affine_layer_norm(weights, &format!("{prefix}.input_layernorm"), 1e-5)?;
-    let post_attention_layernorm = load_affine_layer_norm(weights, &format!("{prefix}.post_attention_layernorm"), 1e-5)?;
+    let input_layernorm =
+        load_affine_layer_norm(weights, &format!("{prefix}.input_layernorm"), 1e-5)?;
+    let post_attention_layernorm =
+        load_affine_layer_norm(weights, &format!("{prefix}.post_attention_layernorm"), 1e-5)?;
 
     let q_proj = get_weight(weights, &format!("{prefix}.self_attn.q_proj.weight"))?;
     let k_proj = get_weight(weights, &format!("{prefix}.self_attn.k_proj.weight"))?;
     let v_proj = get_weight(weights, &format!("{prefix}.self_attn.v_proj.weight"))?;
     let o_proj = get_weight(weights, &format!("{prefix}.self_attn.o_proj.weight"))?;
-    let self_attn_layer_scale = get_weight(weights, &format!("{prefix}.self_attn_layer_scale.scale"))?;
+    let self_attn_layer_scale =
+        get_weight(weights, &format!("{prefix}.self_attn_layer_scale.scale"))?;
 
     let fc1 = get_weight(weights, &format!("{prefix}.mlp.fc1.weight"))?;
     let fc2 = get_weight(weights, &format!("{prefix}.mlp.fc2.weight"))?;
@@ -542,20 +575,14 @@ fn load_encoder_transformer_layer(
     })
 }
 
-fn load_rvq_codebook(
-    weights: &HashMap<String, Array>,
-    prefix: &str,
-) -> Result<RvqCodebook> {
+fn load_rvq_codebook(weights: &HashMap<String, Array>, prefix: &str) -> Result<RvqCodebook> {
     let embed_sum = get_weight(weights, &format!("{prefix}.codebook.embed_sum"))?;
     let cluster_usage = get_weight(weights, &format!("{prefix}.codebook.cluster_usage"))?;
     let embedding = normalize_codebook(&embed_sum, &cluster_usage)?;
     Ok(RvqCodebook { embedding })
 }
 
-fn load_conv1d_proj(
-    weights: &HashMap<String, Array>,
-    prefix: &str,
-) -> Result<nn::Conv1d> {
+fn load_conv1d_proj(weights: &HashMap<String, Array>, prefix: &str) -> Result<nn::Conv1d> {
     let w = transpose_conv_weight(&get_weight(weights, &format!("{prefix}.weight"))?)?;
 
     Ok(nn::Conv1d {
@@ -632,10 +659,8 @@ pub fn load_speech_encoder(weights: &HashMap<String, Array>) -> Result<SpeechEnc
             encoder_layers.push(EncoderLayer::Conv(conv));
         } else if weights.contains_key(&block_key) {
             // It's a residual block
-            let block = load_encoder_res_block(
-                weights,
-                &format!("{prefix}.encoder.layers.{layer_idx}"),
-            )?;
+            let block =
+                load_encoder_res_block(weights, &format!("{prefix}.encoder.layers.{layer_idx}"))?;
             encoder_layers.push(EncoderLayer::ResBlock(block));
         } else {
             // This layer index has no weights — it's an ELU activation.
@@ -645,7 +670,9 @@ pub fn load_speech_encoder(weights: &HashMap<String, Array>) -> Result<SpeechEnc
                 // Check: is there a next layer after this? (up to layer 14)
                 let has_next = (layer_idx + 1..=14).any(|j| {
                     weights.contains_key(&format!("{prefix}.encoder.layers.{j}.conv.weight"))
-                        || weights.contains_key(&format!("{prefix}.encoder.layers.{j}.block.1.conv.weight"))
+                        || weights.contains_key(&format!(
+                            "{prefix}.encoder.layers.{j}.block.1.conv.weight"
+                        ))
                 });
                 if has_next {
                     encoder_layers.push(EncoderLayer::Elu);
@@ -674,7 +701,10 @@ pub fn load_speech_encoder(weights: &HashMap<String, Array>) -> Result<SpeechEnc
             )?);
         }
     }
-    tracing::info!("Loaded {} encoder transformer layers", transformer_layers.len());
+    tracing::info!(
+        "Loaded {} encoder transformer layers",
+        transformer_layers.len()
+    );
 
     // ========================================================================
     // Downsample (25Hz → 12.5Hz)
@@ -682,7 +712,7 @@ pub fn load_speech_encoder(weights: &HashMap<String, Array>) -> Result<SpeechEnc
     let downsample = load_conv1d_with_stride_and_pad(
         weights,
         &format!("{prefix}.downsample.conv"),
-        2,  // stride 2 for 25Hz → 12.5Hz
+        2, // stride 2 for 25Hz → 12.5Hz
         1,
         true, // replicate padding (downsample uses pad_mode="replicate")
     )?;

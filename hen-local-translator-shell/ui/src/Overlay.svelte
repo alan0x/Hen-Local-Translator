@@ -1,6 +1,6 @@
 <script lang="ts">
   import { afterUpdate, onDestroy, onMount } from 'svelte';
-  import logoUrl from '../../icons/icon.png';
+  import logoUrl from '../../icons/logo-mark.png';
   import { getOverlayState, listenOverlay, startWindowDrag, type OverlayState } from './lib/api';
 
   const stackedHistoryLimit = 16;
@@ -14,6 +14,10 @@
   let previousTargetHeight = 0;
   let previousSourceHeight = 0;
   let previousMode: boolean | null = null;
+
+  function applySnapshot(snapshot: OverlayState): void {
+    state = snapshot;
+  }
 
   function dragWindow(event: MouseEvent): void {
     if (event.button !== 0 || (event.target as HTMLElement).closest('button, select, input')) return;
@@ -74,8 +78,8 @@
 
   onMount(() => {
     let unlisten: () => void = () => undefined;
-    void getOverlayState().then((snapshot) => { state = snapshot; });
-    void listenOverlay((snapshot) => { state = snapshot; }).then((cleanup) => { unlisten = cleanup; });
+    void getOverlayState().then(applySnapshot);
+    void listenOverlay(applySnapshot).then((cleanup) => { unlisten = cleanup; });
     return () => unlisten();
   });
 
@@ -93,7 +97,7 @@
 </script>
 
 <svelte:head>
-  <title>Hen Local Translator — Translation</title>
+  <title>Hen Local Live Translator</title>
 </svelte:head>
 
 <svelte:window on:mousedown={dragWindow} />
@@ -154,8 +158,8 @@
     </div>
   {/if}
   <footer class="brand-footer" data-tauri-drag-region>
-    <img class="brand-logo" src={logoUrl} alt="" draggable="false" />
-    <span class="brand-name">很Local · 实时翻译</span>
+    <span class="brand-logo-tile"><span class="brand-logo" style={`--brand-mark:url("${logoUrl}")`} aria-hidden="true"></span></span>
+    <span class="brand-name">很 Local 实时翻译</span>
     <span class="brand-tagline">完全离线，隐私无忧</span>
   </footer>
 </main>

@@ -135,6 +135,44 @@ fn resolve_base_model_dir() -> PathBuf {
     resolve_qwen_root().join("Qwen3-TTS-12Hz-1.7B-Base-8bit")
 }
 
+const BUNDLED_CLONE_VOICES: &[&str] = &["baiyang", "yangyang", "maple", "juniper"];
+
+fn resolve_bundled_voice_dir(voice: &str) -> Option<PathBuf> {
+    let voice = voice.trim().to_lowercase();
+    if !BUNDLED_CLONE_VOICES.contains(&voice.as_str()) {
+        return None;
+    }
+
+    let mut candidates = Vec::new();
+    if let Some(resources) = std::env::var_os("HEN_LOCAL_APP_RESOURCES") {
+        candidates.push(PathBuf::from(resources).join("qwen3-voices").join(&voice));
+    }
+    candidates.push(resolve_qwen_root().join("voices").join(&voice));
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("voices")
+            .join(&voice),
+    );
+    candidates
+        .into_iter()
+        .find(|directory| directory.join("ref.wav").is_file())
+}
+
+fn bundled_clone_request(voice: &str, text: String) -> Option<TtsRequest> {
+    let voice_dir = resolve_bundled_voice_dir(voice)?;
+    let language = match voice.trim().to_lowercase().as_str() {
+        "baiyang" | "yangyang" => "chinese",
+        _ => "english",
+    };
+    Some(TtsRequest::Custom {
+        ref_wav: voice_dir.join("ref.wav").to_string_lossy().into_owned(),
+        // Avoid leaking the spoken reference transcript into generated audio.
+        prompt_text: String::new(),
+        language: language.to_string(),
+        text,
+    })
+}
+
 fn model_dir_ready(model_dir: &Path) -> bool {
     model_dir.join("config.json").exists()
         && model_dir.join("generation_config.json").exists()
@@ -512,9 +550,6 @@ fn synthesize_qwen(
             };
             Ok((samples, synth.sample_rate))
         }
-        TtsRequest::Trained { .. } => Err(anyhow!(
-            "Qwen backend does not support VOICE:TRAINED custom-weight inference yet"
-        )),
     }
 }
 
@@ -563,7 +598,7 @@ fn main() -> Result<()> {
 
     tracing::info!("Connected to Dora dataflow");
 
-    let default_voice = std::env::var("VOICE_NAME").unwrap_or_else(|_| "Doubao".to_string());
+    let default_voice = std::env::var("VOICE_NAME").unwrap_or_else(|_| "vivian".to_string());
     let mut qwen_state = QwenState::new();
 
     while let Some(event) = events.recv() {
@@ -583,13 +618,12 @@ fn main() -> Result<()> {
 
                 let raw = arr.value(0);
                 let (text_str, params) = parse_text_and_params(raw);
-                let request = match TtsRequest::parse(&text_str) {
-                    Some(r) => r,
-                    None => TtsRequest::Preset {
+                let request = TtsRequest::parse(&text_str)
+                    .or_else(|| bundled_clone_request(&default_voice, text_str.clone()))
+                    .unwrap_or_else(|| TtsRequest::Preset {
                         voice: default_voice.clone(),
                         text: text_str,
-                    },
-                };
+                    });
 
                 tracing::info!(
                     "Qwen request: speed={:?}, pitch={:?}, volume={:?}, instruct={}",
@@ -665,5 +699,45 @@ mod tests {
         assert_eq!(parse_max_new_tokens_override(Some("0")), None);
         assert_eq!(parse_max_new_tokens_override(Some("-1")), None);
         assert_eq!(parse_max_new_tokens_override(Some("4096")), Some(4096));
+    }
+
+    #[test]
+    fn chinese_bundled_voice_uses_xvector_reference_audio() {
+        let request = bundled_clone_request("baiyang", "你好".to_string())
+            .expect("baiyang reference voice should be bundled");
+        match request {
+            TtsRequest::Custom {
+                ref_wav,
+                prompt_text,
+                language,
+                text,
+            } => {
+                assert!(ref_wav.ends_with("baiyang/ref.wav"));
+                assert!(prompt_text.is_empty());
+                assert_eq!(language, "chinese");
+                assert_eq!(text, "你好");
+            }
+            TtsRequest::Preset { .. } => panic!("baiyang must not fall back to a preset voice"),
+        }
+    }
+
+    #[test]
+    fn english_bundled_voice_uses_xvector_reference_audio() {
+        let request = bundled_clone_request("maple", "hello".to_string())
+            .expect("maple reference voice should be bundled");
+        match request {
+            TtsRequest::Custom {
+                ref_wav,
+                prompt_text,
+                language,
+                text,
+            } => {
+                assert!(ref_wav.ends_with("maple/ref.wav"));
+                assert!(prompt_text.is_empty());
+                assert_eq!(language, "english");
+                assert_eq!(text, "hello");
+            }
+            TtsRequest::Preset { .. } => panic!("maple must not fall back to a preset voice"),
+        }
     }
 }

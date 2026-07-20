@@ -45,12 +45,8 @@ pub fn apply_mrope_tts(
         .multiply(inv_freq.index(NewAxis))?;
 
     // cos/sin for temporal section: [1, 1, L, temporal_section]
-    let cos_temporal = angles
-        .cos()?
-        .reshape(&[1, 1, l, temporal_section])?;
-    let sin_temporal = angles
-        .sin()?
-        .reshape(&[1, 1, l, temporal_section])?;
+    let cos_temporal = angles.cos()?.reshape(&[1, 1, l, temporal_section])?;
+    let sin_temporal = angles.sin()?.reshape(&[1, 1, l, temporal_section])?;
 
     // Pad to half_dim: temporal gets real rotation, rest gets identity (cos=1, sin=0)
     let pad_size = half_dim - temporal_section;
@@ -70,11 +66,11 @@ pub fn apply_mrope_tts(
     // cos_half: [1, 1, L, half_dim]
     // Need: [1, 1, L, head_dim] with pattern [c0, c0, c1, c1, ...]
     let cos_half_exp = cos_half.reshape(&[1, 1, l, half_dim, 1])?;
-    let cos_full = concatenate_axis(&[&cos_half_exp, &cos_half_exp], -1)?
-        .reshape(&[1, 1, l, head_dim])?;
+    let cos_full =
+        concatenate_axis(&[&cos_half_exp, &cos_half_exp], -1)?.reshape(&[1, 1, l, head_dim])?;
     let sin_half_exp = sin_half.reshape(&[1, 1, l, half_dim, 1])?;
-    let sin_full = concatenate_axis(&[&sin_half_exp, &sin_half_exp], -1)?
-        .reshape(&[1, 1, l, head_dim])?;
+    let sin_full =
+        concatenate_axis(&[&sin_half_exp, &sin_half_exp], -1)?.reshape(&[1, 1, l, head_dim])?;
 
     // --- Interleaved (traditional) rotation ---
     // For each consecutive pair (x[2i], x[2i+1]):
@@ -89,7 +85,7 @@ pub fn apply_mrope_tts(
 
     use mlx_rs::ops::indexing::IndexOp;
     let x_even = pairs.index((.., .., 0)); // [N, half_dim]  (x[2i])
-    let x_odd = pairs.index((.., .., 1));  // [N, half_dim]  (x[2i+1])
+    let x_odd = pairs.index((.., .., 1)); // [N, half_dim]  (x[2i+1])
 
     // Build rotated: [-x_odd, x_even] interleaved back to pairs
     let neg_x_odd = x_odd.negative()?;

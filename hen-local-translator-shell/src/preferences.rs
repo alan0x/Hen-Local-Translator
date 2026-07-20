@@ -5,6 +5,7 @@ use std::{fs, path::PathBuf};
 #[serde(default)]
 pub struct AppPreferences {
     pub app_language: String,
+    pub accent_theme: String,
     pub display_name: String,
     pub avatar_letter: String,
     pub last_seen_app_version: Option<String>,
@@ -41,6 +42,7 @@ impl Default for AppPreferences {
     fn default() -> Self {
         Self {
             app_language: "zh".into(),
+            accent_theme: "neon-blue".into(),
             display_name: "User".into(),
             avatar_letter: "U".into(),
             last_seen_app_version: None,
@@ -76,10 +78,9 @@ impl Default for AppPreferences {
 }
 
 fn preferences_dir() -> PathBuf {
-    dirs::home_dir()
+    dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(".dora")
-        .join("primespeech")
+        .join("Hen Local Translator")
 }
 
 pub fn preferences_path() -> PathBuf {
@@ -143,6 +144,12 @@ fn sanitize(preferences: &mut AppPreferences) {
     if !matches!(preferences.app_language.as_str(), "zh" | "en") {
         preferences.app_language = "zh".into();
     }
+    if !matches!(
+        preferences.accent_theme.as_str(),
+        "neon-blue" | "neon-orange" | "neon-pink" | "neon-green"
+    ) {
+        preferences.accent_theme = "neon-blue".into();
+    }
 }
 
 #[cfg(test)]
@@ -157,6 +164,7 @@ mod tests {
             translation_font_size_preset: "999".into(),
             translation_anchor_position_preset: "42".into(),
             translation_overlay_opacity: 0.1,
+            accent_theme: "unknown".into(),
             ..AppPreferences::default()
         };
         sanitize(&mut preferences);
@@ -165,5 +173,18 @@ mod tests {
         assert_eq!(preferences.translation_font_size_preset, "24");
         assert_eq!(preferences.translation_anchor_position_preset, "50");
         assert_eq!(preferences.translation_overlay_opacity, 0.35);
+        assert_eq!(preferences.accent_theme, "neon-blue");
+    }
+
+    #[test]
+    fn preserves_supported_accent_themes() {
+        for theme in ["neon-blue", "neon-orange", "neon-pink", "neon-green"] {
+            let mut preferences = AppPreferences {
+                accent_theme: theme.into(),
+                ..AppPreferences::default()
+            };
+            sanitize(&mut preferences);
+            assert_eq!(preferences.accent_theme, theme);
+        }
     }
 }

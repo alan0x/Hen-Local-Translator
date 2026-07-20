@@ -365,17 +365,6 @@ fn push_converted_input<F>(
 }
 
 impl CpalMicCapture {
-    fn new() -> Result<Self, String> {
-        Ok(Self {
-            stream: None,
-            audio_buffer: Arc::new(parking_lot::Mutex::new(Vec::new())),
-            is_recording: false,
-            sample_rate: 16000,
-            vad_threshold: 0.01,
-            device_name: None,
-        })
-    }
-
     fn with_device(device_name: Option<String>) -> Result<Self, String> {
         Ok(Self {
             stream: None,
@@ -710,7 +699,6 @@ impl AecInputBridge {
 
         // VAD state
         let mut vad_state = VadState::default();
-        let mut recording_active = false;
         let mut using_aec = aec_enabled.load(Ordering::Acquire) && aec_available;
 
         // Log config on startup (matching Python behavior)
@@ -809,7 +797,7 @@ impl AecInputBridge {
             }
         }
         is_recording.store(true, Ordering::Release);
-        recording_active = true;
+        let mut recording_active = true;
 
         // Update shared state
         if let Some(ref ss) = shared_state {
@@ -1767,21 +1755,20 @@ impl DoraBridge for AecInputBridge {
 
         match output_id {
             "control" => {
-                if let DoraData::Json(val) = data {
-                    if let Some(action) = val.get("action").and_then(|v| v.as_str()) {
-                        let cmd = match action {
-                            "start_recording" => Some(AecControlCommand::StartRecording),
-                            "stop_recording" => Some(AecControlCommand::StopRecording),
-                            "toggle_aec" | "set_aec_enabled" => {
-                                let enabled =
-                                    val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-                                Some(AecControlCommand::SetAecEnabled(enabled))
-                            }
-                            _ => None,
-                        };
-                        if let Some(cmd) = cmd {
-                            self.send_control(cmd)?;
+                let DoraData::Json(val) = data;
+                if let Some(action) = val.get("action").and_then(|v| v.as_str()) {
+                    let cmd = match action {
+                        "start_recording" => Some(AecControlCommand::StartRecording),
+                        "stop_recording" => Some(AecControlCommand::StopRecording),
+                        "toggle_aec" | "set_aec_enabled" => {
+                            let enabled =
+                                val.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                            Some(AecControlCommand::SetAecEnabled(enabled))
                         }
+                        _ => None,
+                    };
+                    if let Some(cmd) = cmd {
+                        self.send_control(cmd)?;
                     }
                 }
             }

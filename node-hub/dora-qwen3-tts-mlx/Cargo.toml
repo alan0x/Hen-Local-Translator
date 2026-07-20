@@ -3,7 +3,7 @@ name = "dora-qwen3-tts-mlx"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Qwen3 TTS MLX Dora backend for Moxin Voice"
+description = "Qwen3 TTS MLX Dora backend for Hen Local"
 
 [dependencies]
 qwen3-tts-mlx = { path = "patches/qwen3-tts-mlx" }

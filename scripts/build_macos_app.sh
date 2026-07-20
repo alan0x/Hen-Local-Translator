@@ -17,7 +17,7 @@ APP_NAME="Hen Local Translator"
 BUNDLE_ID="com.henlocal.translator"
 BIN_NAME="hen-local-translator"
 PROFILE="release"
-ICON_PATH=""
+ICON_PATH="$ROOT_DIR/hen-local-translator-shell/icons/icon.icns"
 OUT_DIR="$ROOT_DIR/dist"
 VERSION="$WORKSPACE_VERSION"
 BUILD_TARGET_DIR="${HEN_LOCAL_CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/hen-local-translator-cargo-target}"
@@ -39,7 +39,7 @@ Usage:
 Options:
   --app-name <name>      App name shown in Dock/Finder (default: "$APP_NAME")
   --bundle-id <id>       CFBundleIdentifier (default: "$BUNDLE_ID")
-  --icon <path>          .icns or .png icon path (optional)
+  --icon <path>          .icns or .png icon path (default: Hen Local icon)
   --profile <profile>    Cargo profile, e.g. release/dev (default: "$PROFILE")
   --out-dir <dir>        Output directory for .app (default: "$OUT_DIR")
   --version <version>    CFBundleShortVersionString (default: "$VERSION")
@@ -122,7 +122,7 @@ create_icns_from_png() {
     exit 1
   fi
 
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/moxin-iconset.XXXXXX")"
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/henlocal-iconset.XXXXXX")"
   iconset="$tmp_dir/AppIcon.iconset"
   mkdir -p "$iconset"
 
@@ -171,11 +171,13 @@ PY
 run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p hen-local-translator-shell --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen3-asr --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen35-translator --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
+run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen3-tts-mlx --bin qwen-tts-node --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p hen-local-init --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
 
 SHELL_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/$BIN_NAME"
 QWEN_ASR_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/dora-qwen3-asr"
 QWEN35_TRANSLATOR_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/dora-qwen35-translator"
+QWEN_TTS_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/qwen-tts-node"
 MOXIN_INIT_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/hen-local-init"
 MLX_METALLIB_PATH="$BUILD_TARGET_DIR/$PROFILE/mlx.metallib"
 DORA_BIN_PATH="$(command -v dora || true)"
@@ -189,6 +191,10 @@ if [[ ! -f "$QWEN_ASR_BIN_PATH" ]]; then
 fi
 if [[ ! -f "$QWEN35_TRANSLATOR_BIN_PATH" ]]; then
   echo "Binary not found: $QWEN35_TRANSLATOR_BIN_PATH"
+  exit 1
+fi
+if [[ ! -f "$QWEN_TTS_BIN_PATH" ]]; then
+  echo "Binary not found: $QWEN_TTS_BIN_PATH"
   exit 1
 fi
 if [[ ! -f "$MOXIN_INIT_BIN_PATH" ]]; then
@@ -213,7 +219,7 @@ QWEN_MODEL_DIR="${QWEN3_TTS_MODEL_ROOT:-$HOME/.OminiX/models/qwen3-tts-mlx}"
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RES_DIR" "$SCRIPTS_DIR" "$DATAFLOW_DIR" "$QWEN_PREVIEW_DIR" "$QWEN_VOICE_DIR"
 
-TRANSLATION_QWEN35_BUNDLE_YAML="$ROOT_DIR/scripts/dataflow/translation_qwen35.bundle.yml"
+TRANSLATION_QWEN35_BUNDLE_YAML="$ROOT_DIR/hen-local-translator-shell/dataflow/translation_qwen35.yml"
 if [[ ! -f "$TRANSLATION_QWEN35_BUNDLE_YAML" ]]; then
   echo "Dataflow file not found: $TRANSLATION_QWEN35_BUNDLE_YAML"
   exit 1
@@ -222,12 +228,13 @@ fi
 cp "$SHELL_BIN_PATH" "$MACOS_DIR/${BIN_NAME}-bin"
 cp "$QWEN_ASR_BIN_PATH" "$MACOS_DIR/dora-qwen3-asr"
 cp "$QWEN35_TRANSLATOR_BIN_PATH" "$MACOS_DIR/dora-qwen35-translator"
+cp "$QWEN_TTS_BIN_PATH" "$MACOS_DIR/qwen-tts-node"
 cp "$MOXIN_INIT_BIN_PATH" "$MACOS_DIR/hen-local-init"
 cp "$DORA_BIN_PATH" "$MACOS_DIR/dora"
 if [[ -f "$MLX_METALLIB_PATH" ]]; then
   cp "$MLX_METALLIB_PATH" "$MACOS_DIR/mlx.metallib"
 fi
-chmod +x "$MACOS_DIR/${BIN_NAME}-bin" "$MACOS_DIR/dora-qwen3-asr" "$MACOS_DIR/dora-qwen35-translator" "$MACOS_DIR/hen-local-init"
+chmod +x "$MACOS_DIR/${BIN_NAME}-bin" "$MACOS_DIR/dora-qwen3-asr" "$MACOS_DIR/dora-qwen35-translator" "$MACOS_DIR/qwen-tts-node" "$MACOS_DIR/hen-local-init"
 chmod +x "$MACOS_DIR/dora"
 
 cp "$ROOT_DIR/scripts/macos_preflight.sh" "$SCRIPTS_DIR/macos_preflight.sh"

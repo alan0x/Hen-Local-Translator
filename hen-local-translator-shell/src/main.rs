@@ -1,6 +1,6 @@
-//! Hen Local Translator - Standalone Live Translation Application
+//! Hen Local Live Translator - Standalone Live Translation Application
 //!
-//! A standalone desktop application for real-time speech translation.
+//! A standalone desktop application for live speech translation.
 
 mod app;
 mod dataflow;
@@ -11,7 +11,7 @@ use clap::Parser;
 
 #[derive(Parser, Debug, Default, Clone)]
 #[command(name = "hen-local-translator")]
-#[command(about = "Hen Local Translator - Live Translation")]
+#[command(about = "Hen Local Live Translator")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 pub struct Args {
     /// Log level (trace, debug, info, warn, error)
@@ -39,7 +39,7 @@ fn main() {
         .init();
 
     log::info!(
-        "Starting Hen Local Translator v{}",
+        "Starting Hen Local Live Translator v{}",
         env!("CARGO_PKG_VERSION")
     );
     log::debug!("CLI args: {:?}", args);

@@ -95,23 +95,19 @@ fn resolve_template(resource_dir: Option<&Path>) -> Option<PathBuf> {
 
     let mut candidates = Vec::new();
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    candidates.extend([
-        manifest_dir.join("../apps/hen-local-translator/dataflow/translation_qwen35.yml"),
-        manifest_dir.join("../scripts/dataflow/translation_qwen35.bundle.yml"),
-    ]);
+    candidates.push(manifest_dir.join("dataflow/translation_qwen35.yml"));
     if let Some(resource_dir) = resource_dir {
         candidates.extend([
             resource_dir.join("translation_qwen35.yml"),
             resource_dir.join("dataflow/translation_qwen35.yml"),
-            resource_dir.join("apps/hen-local-translator/dataflow/translation_qwen35.yml"),
-            resource_dir.join("_up_/apps/hen-local-translator/dataflow/translation_qwen35.yml"),
+            resource_dir.join("_up_/hen-local-translator-shell/dataflow/translation_qwen35.yml"),
         ]);
     }
     if let Some(resources) = env::var_os("HEN_LOCAL_APP_RESOURCES") {
         candidates.push(PathBuf::from(resources).join("dataflow/translation_qwen35.yml"));
     }
     candidates.push(PathBuf::from(
-        "apps/hen-local-translator/dataflow/translation_qwen35.yml",
+        "hen-local-translator-shell/dataflow/translation_qwen35.yml",
     ));
     if let Some(home) = dirs::home_dir() {
         candidates.push(home.join(".OminiX/dataflows/translation_qwen35.yml"));
@@ -308,5 +304,12 @@ mod tests {
     fn removes_optional_tts_block_without_touching_translation_nodes() {
         let input = "before\n# TTS-BEGIN\ntts\n# TTS-END\nafter\n";
         assert_eq!(strip_optional_tts(input), "before\nafter\n");
+    }
+
+    #[test]
+    fn spoken_translation_uses_translator_output_directly() {
+        let template = resolve_template(None).expect("translation template should resolve");
+        let content = fs::read_to_string(template).expect("template should be readable");
+        assert!(content.contains("text: translator/translation"));
     }
 }

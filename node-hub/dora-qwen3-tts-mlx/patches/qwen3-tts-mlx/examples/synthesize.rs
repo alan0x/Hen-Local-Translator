@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::time::Instant;
 
-use qwen3_tts_mlx::{normalize_audio, save_wav, Synthesizer, SynthesizeOptions};
+use qwen3_tts_mlx::{normalize_audio, save_wav, SynthesizeOptions, Synthesizer};
 
 #[derive(Parser)]
 #[command(name = "qwen3-tts", about = "Qwen3-TTS text-to-speech synthesis")]
@@ -80,8 +80,7 @@ fn should_use_voice_design_route(
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -123,7 +122,11 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         } else {
             ref_samples
         };
-        eprintln!("Reference audio: {:.2}s ({} samples at 24kHz)", ref_samples.len() as f32 / 24000.0, ref_samples.len());
+        eprintln!(
+            "Reference audio: {:.2}s ({} samples at 24kHz)",
+            ref_samples.len() as f32 / 24000.0,
+            ref_samples.len()
+        );
 
         let (samples, timing) = if let Some(ref ref_text) = args.reference_text {
             // ICL mode (full quality): uses both speaker embedding + reference codes

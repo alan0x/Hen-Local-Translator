@@ -222,21 +222,40 @@ impl DecoderTransformerLayer {
         let scale = (self.head_dim as f32).sqrt().recip();
 
         let normed = self.input_layernorm.forward(x)?;
-        let q = self.q_proj.forward(&normed)?
+        let q = self
+            .q_proj
+            .forward(&normed)?
             .reshape(&[B, L, self.n_heads, self.head_dim])?
             .transpose_axes(&[0, 2, 1, 3])?;
-        let k = self.k_proj.forward(&normed)?
+        let k = self
+            .k_proj
+            .forward(&normed)?
             .reshape(&[B, L, self.n_heads, self.head_dim])?
             .transpose_axes(&[0, 2, 1, 3])?;
-        let v = self.v_proj.forward(&normed)?
+        let v = self
+            .v_proj
+            .forward(&normed)?
             .reshape(&[B, L, self.n_heads, self.head_dim])?
             .transpose_axes(&[0, 2, 1, 3])?;
 
-        let q = self.rope.forward(nn::RopeInputBuilder::new(&q).offset(offset).build().unwrap())?;
-        let k = self.rope.forward(nn::RopeInputBuilder::new(&k).offset(offset).build().unwrap())?;
+        let q = self.rope.forward(
+            nn::RopeInputBuilder::new(&q)
+                .offset(offset)
+                .build()
+                .unwrap(),
+        )?;
+        let k = self.rope.forward(
+            nn::RopeInputBuilder::new(&k)
+                .offset(offset)
+                .build()
+                .unwrap(),
+        )?;
 
         let attn_out = mlx_rs::fast::scaled_dot_product_attention(
-            q, k, v, scale,
+            q,
+            k,
+            v,
+            scale,
             mask.map(mlx_rs::fast::ScaledDotProductAttentionMask::Array),
         )?
         .transpose_axes(&[0, 2, 1, 3])?
@@ -434,11 +453,7 @@ fn create_sliding_window_mask(seq_len: i32, window_size: i32) -> Result<Array> {
 
     // Convert to float additive mask: 0.0 where attend, -inf where masked
     // scaled_dot_product_attention adds this mask to the attention logits
-    let float_mask = mlx_rs::ops::r#where(
-        &bool_mask,
-        &array!(0.0f32),
-        &array!(f32::NEG_INFINITY),
-    )?;
+    let float_mask = mlx_rs::ops::r#where(&bool_mask, &array!(0.0f32), &array!(f32::NEG_INFINITY))?;
 
     Ok(float_mask)
 }
@@ -510,10 +525,7 @@ fn load_causal_conv_transpose1d(
 
     // Causal ConvTranspose1d: trim excess = kernel_size - stride from right
     let trim_right = kernel_size - stride;
-    Ok(CausalConvTranspose1d {
-        conv_t,
-        trim_right,
-    })
+    Ok(CausalConvTranspose1d { conv_t, trim_right })
 }
 
 fn load_snake_beta(weights: &HashMap<String, Array>, prefix: &str) -> Result<SnakeBeta> {
@@ -556,7 +568,10 @@ fn load_decoder_transformer_layer(
 
     Ok(DecoderTransformerLayer {
         input_layernorm: nn::RmsNorm {
-            weight: Param::new(get_weight(weights, &format!("{prefix}.input_layernorm.weight"))?),
+            weight: Param::new(get_weight(
+                weights,
+                &format!("{prefix}.input_layernorm.weight"),
+            )?),
             eps: config.rms_norm_eps,
         },
         q_proj: load_linear(weights, &format!("{prefix}.self_attn.q_proj"))?,
@@ -565,7 +580,10 @@ fn load_decoder_transformer_layer(
         o_proj: load_linear(weights, &format!("{prefix}.self_attn.o_proj"))?,
         attn_layer_scale: get_weight(weights, &format!("{prefix}.self_attn_layer_scale.scale"))?,
         post_attention_layernorm: nn::RmsNorm {
-            weight: Param::new(get_weight(weights, &format!("{prefix}.post_attention_layernorm.weight"))?),
+            weight: Param::new(get_weight(
+                weights,
+                &format!("{prefix}.post_attention_layernorm.weight"),
+            )?),
             eps: config.rms_norm_eps,
         },
         gate_proj: load_linear(weights, &format!("{prefix}.mlp.gate_proj"))?,
@@ -584,34 +602,59 @@ fn normalize_codebook(embedding_sum: &Array, cluster_usage: &Array) -> Result<Ar
     Ok(embedding_sum.divide(clamped.index((.., NewAxis)))?)
 }
 
-pub fn load_speech_tokenizer(model_dir: &Path, config: &DecoderConfig) -> Result<SpeechTokenizerDecoder> {
+pub fn load_speech_tokenizer(
+    model_dir: &Path,
+    config: &DecoderConfig,
+) -> Result<SpeechTokenizerDecoder> {
     let st_dir = model_dir.join("speech_tokenizer");
     let path = st_dir.join("model.safetensors");
     let weights: HashMap<String, Array> = Array::load_safetensors(&path)?;
 
     // SplitRVQ codebooks
-    let sem_sum = get_weight(&weights, "decoder.quantizer.rvq_first.vq.layers.0._codebook.embedding_sum")?;
-    let sem_usage = get_weight(&weights, "decoder.quantizer.rvq_first.vq.layers.0._codebook.cluster_usage")?;
+    let sem_sum = get_weight(
+        &weights,
+        "decoder.quantizer.rvq_first.vq.layers.0._codebook.embedding_sum",
+    )?;
+    let sem_usage = get_weight(
+        &weights,
+        "decoder.quantizer.rvq_first.vq.layers.0._codebook.cluster_usage",
+    )?;
     let semantic_codebook = normalize_codebook(&sem_sum, &sem_usage)?;
 
     let mut acoustic_codebooks = Vec::with_capacity(15);
     for i in 0..15 {
-        let sum = get_weight(&weights, &format!("decoder.quantizer.rvq_rest.vq.layers.{i}._codebook.embedding_sum"))?;
-        let usage = get_weight(&weights, &format!("decoder.quantizer.rvq_rest.vq.layers.{i}._codebook.cluster_usage"))?;
+        let sum = get_weight(
+            &weights,
+            &format!("decoder.quantizer.rvq_rest.vq.layers.{i}._codebook.embedding_sum"),
+        )?;
+        let usage = get_weight(
+            &weights,
+            &format!("decoder.quantizer.rvq_rest.vq.layers.{i}._codebook.cluster_usage"),
+        )?;
         acoustic_codebooks.push(normalize_codebook(&sum, &usage)?);
     }
 
     // RVQ output projections (Conv1d k=1)
-    let rvq_first_w = transpose_conv_weight(&get_weight(&weights, "decoder.quantizer.rvq_first.output_proj.weight")?)?;
+    let rvq_first_w = transpose_conv_weight(&get_weight(
+        &weights,
+        "decoder.quantizer.rvq_first.output_proj.weight",
+    )?)?;
     let out_dim = rvq_first_w.dim(0) as i32;
     let in_dim = rvq_first_w.dim(2) as i32;
-    let mut rvq_first_output_proj = nn::Conv1dBuilder::new(in_dim, out_dim, 1).bias(false).build()?;
+    let mut rvq_first_output_proj = nn::Conv1dBuilder::new(in_dim, out_dim, 1)
+        .bias(false)
+        .build()?;
     rvq_first_output_proj.weight = Param::new(rvq_first_w);
 
-    let rvq_rest_w = transpose_conv_weight(&get_weight(&weights, "decoder.quantizer.rvq_rest.output_proj.weight")?)?;
+    let rvq_rest_w = transpose_conv_weight(&get_weight(
+        &weights,
+        "decoder.quantizer.rvq_rest.output_proj.weight",
+    )?)?;
     let out_dim = rvq_rest_w.dim(0) as i32;
     let in_dim = rvq_rest_w.dim(2) as i32;
-    let mut rvq_rest_output_proj = nn::Conv1dBuilder::new(in_dim, out_dim, 1).bias(false).build()?;
+    let mut rvq_rest_output_proj = nn::Conv1dBuilder::new(in_dim, out_dim, 1)
+        .bias(false)
+        .build()?;
     rvq_rest_output_proj.weight = Param::new(rvq_rest_w);
 
     // Pre-conv
@@ -638,7 +681,11 @@ pub fn load_speech_tokenizer(model_dir: &Path, config: &DecoderConfig) -> Result
     let mut upsample_convs = Vec::new();
     let mut upsample_convnext = Vec::new();
     for (i, &ratio) in config.upsampling_ratios.iter().enumerate() {
-        upsample_convs.push(load_causal_conv_transpose1d(&weights, &format!("decoder.upsample.{i}.0"), ratio)?);
+        upsample_convs.push(load_causal_conv_transpose1d(
+            &weights,
+            &format!("decoder.upsample.{i}.0"),
+            ratio,
+        )?);
         let prefix = format!("decoder.upsample.{i}.1");
         upsample_convnext.push(ConvNeXtBlock {
             dwconv: load_causal_conv1d(&weights, &format!("{prefix}.dwconv"), 1)?,
@@ -660,11 +707,19 @@ pub fn load_speech_tokenizer(model_dir: &Path, config: &DecoderConfig) -> Result
         let bi = b_idx + 1;
         decoder_blocks.push(DecoderBlock {
             snake: load_snake_beta(&weights, &format!("decoder.decoder.{bi}.block.0"))?,
-            conv_t: load_causal_conv_transpose1d(&weights, &format!("decoder.decoder.{bi}.block.1"), rate)?,
-            res_units: dilations.iter().enumerate().map(|(r_idx, &dil)| {
-                let ri = r_idx + 2;
-                load_residual_unit(&weights, &format!("decoder.decoder.{bi}.block.{ri}"), dil)
-            }).collect::<Result<Vec<_>>>()?,
+            conv_t: load_causal_conv_transpose1d(
+                &weights,
+                &format!("decoder.decoder.{bi}.block.1"),
+                rate,
+            )?,
+            res_units: dilations
+                .iter()
+                .enumerate()
+                .map(|(r_idx, &dil)| {
+                    let ri = r_idx + 2;
+                    load_residual_unit(&weights, &format!("decoder.decoder.{bi}.block.{ri}"), dil)
+                })
+                .collect::<Result<Vec<_>>>()?,
         });
     }
 

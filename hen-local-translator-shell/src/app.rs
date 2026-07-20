@@ -24,6 +24,7 @@ use tauri::{
 #[serde(rename_all = "camelCase")]
 pub struct TranslationSettings {
     app_language: String,
+    accent_theme: String,
     source_language: String,
     target_language: String,
     input_device: String,
@@ -45,6 +46,7 @@ impl From<&AppPreferences> for TranslationSettings {
     fn from(preferences: &AppPreferences) -> Self {
         Self {
             app_language: preferences.app_language.clone(),
+            accent_theme: preferences.accent_theme.clone(),
             source_language: preferences.translation_source_language.clone(),
             target_language: preferences.translation_target_language.clone(),
             input_device: preferences.translation_input_device.clone(),
@@ -69,6 +71,10 @@ impl From<&AppPreferences> for TranslationSettings {
 impl TranslationSettings {
     fn apply_to(&self, preferences: &mut AppPreferences) {
         preferences.app_language = self.app_language.clone();
+        preferences.accent_theme = match self.accent_theme.as_str() {
+            "neon-orange" | "neon-pink" | "neon-green" => self.accent_theme.clone(),
+            _ => "neon-blue".into(),
+        };
         preferences.translation_source_language = self.source_language.clone();
         preferences.translation_target_language = self.target_language.clone();
         preferences.translation_input_device = self.input_device.clone();
@@ -135,6 +141,7 @@ struct OverlayState {
     subtitle_split: bool,
     font_size: u32,
     anchor_position: u32,
+    accent_theme: String,
     history: Vec<Sentence>,
     pending_source_text: String,
 }
@@ -293,6 +300,7 @@ impl AppState {
             })
             .unwrap_or_default();
 
+        let accent_theme = self.preferences.lock().accent_theme.clone();
         OverlayState {
             active,
             status,
@@ -309,6 +317,7 @@ impl AppState {
                 .read()
                 .parse()
                 .unwrap_or(50),
+            accent_theme,
             history,
             pending_source_text,
         }
@@ -406,6 +415,7 @@ fn update_settings(
         changed
     };
     state.sync_shared_state();
+    apply_native_identity(&app, &settings)?;
     apply_overlay_window(&app, &settings, overlay_mode_changed)?;
     if *state.subtitle_preview_visible.lock() {
         state.show_subtitle_preview(&settings);
@@ -542,6 +552,12 @@ fn voice_preview_path(state: &AppState, voice: &str) -> Result<PathBuf, String> 
                 .join(&filename),
         );
     }
+    // In development, prefer the checked-in preview over a stale model cache.
+    candidates.push(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../node-hub/dora-qwen3-tts-mlx/previews")
+            .join(&filename),
+    );
     if let Ok(model_root) = std::env::var("QWEN3_TTS_MODEL_ROOT") {
         candidates.push(PathBuf::from(model_root).join("previews").join(&filename));
     }
@@ -560,51 +576,6 @@ fn voice_preview_path(state: &AppState, voice: &str) -> Result<PathBuf, String> 
             .join("previews")
             .join(&filename),
     );
-
-    if matches!(voice.as_str(), "baiyang" | "yangyang" | "maple" | "juniper") {
-        if let Ok(resource_root) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
-            candidates.push(
-                PathBuf::from(resource_root)
-                    .join("qwen3-voices")
-                    .join(&voice)
-                    .join("ref.wav"),
-            );
-        }
-        if let Some(resource_dir) = state.resource_dir.as_deref() {
-            candidates.push(
-                resource_dir
-                    .join("qwen3-voices")
-                    .join(&voice)
-                    .join("ref.wav"),
-            );
-            candidates.push(
-                resource_dir
-                    .join("_up_")
-                    .join("node-hub")
-                    .join("dora-qwen3-tts-mlx")
-                    .join("voices")
-                    .join(&voice)
-                    .join("ref.wav"),
-            );
-        }
-        if let Some(home) = dirs::home_dir() {
-            candidates.push(
-                home.join(".OminiX")
-                    .join("models")
-                    .join("qwen3-tts-mlx")
-                    .join("voices")
-                    .join(&voice)
-                    .join("ref.wav"),
-            );
-        }
-        candidates.push(
-            PathBuf::from("node-hub")
-                .join("dora-qwen3-tts-mlx")
-                .join("voices")
-                .join(&voice)
-                .join("ref.wav"),
-        );
-    }
 
     candidates
         .into_iter()
@@ -674,7 +645,7 @@ fn output_devices() -> Vec<String> {
 
 fn create_overlay(app: &tauri::App) -> tauri::Result<WebviewWindow> {
     let overlay = WebviewWindowBuilder::new(app, "overlay", WebviewUrl::App("overlay.html".into()))
-        .title("Hen Local Translator — Translation")
+        .title("Hen Local Live Translator")
         .inner_size(960.0, 640.0)
         .min_inner_size(560.0, 260.0)
         .resizable(true)
@@ -697,6 +668,57 @@ fn create_overlay(app: &tauri::App) -> tauri::Result<WebviewWindow> {
         }
     });
     Ok(overlay)
+}
+
+fn localized_app_name(language: &str) -> &'static str {
+    if language == "en" {
+        "Hen Local Live Translator"
+    } else {
+        "很 Local 实时翻译"
+    }
+}
+
+fn apply_native_identity(
+    app: &tauri::AppHandle,
+    settings: &TranslationSettings,
+) -> Result<(), String> {
+    let name = localized_app_name(&settings.app_language);
+    if let Some(window) = app.get_webview_window("main") {
+        window.set_title(name).map_err(|error| error.to_string())?;
+    }
+    if let Some(window) = app.get_webview_window("overlay") {
+        window.set_title(name).map_err(|error| error.to_string())?;
+    }
+    apply_macos_dock_icon(app, &settings.accent_theme)
+}
+
+#[cfg(target_os = "macos")]
+fn apply_macos_dock_icon(app: &tauri::AppHandle, accent_theme: &str) -> Result<(), String> {
+    let icon: &'static [u8] = match accent_theme {
+        "neon-orange" => include_bytes!("../icons/icon-neon-orange.png"),
+        "neon-pink" => include_bytes!("../icons/icon-neon-pink.png"),
+        "neon-green" => include_bytes!("../icons/icon-neon-green.png"),
+        _ => include_bytes!("../icons/icon-neon-blue.png"),
+    };
+
+    app.run_on_main_thread(move || {
+        use objc2::{AllocAnyThread, MainThreadMarker};
+        use objc2_app_kit::{NSApplication, NSImage};
+        use objc2_foundation::NSData;
+
+        let marker = unsafe { MainThreadMarker::new_unchecked() };
+        let application = NSApplication::sharedApplication(marker);
+        let data = NSData::with_bytes(icon);
+        if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
+            unsafe { application.setApplicationIconImage(Some(&image)) };
+        }
+    })
+    .map_err(|error| error.to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_macos_dock_icon(_app: &tauri::AppHandle, _accent_theme: &str) -> Result<(), String> {
+    Ok(())
 }
 
 fn apply_overlay_window(
@@ -779,6 +801,7 @@ pub fn run(args: Args) {
                 let preferences = state.preferences.lock();
                 TranslationSettings::from(&*preferences)
             };
+            apply_native_identity(app.handle(), &initial_settings).map_err(anyhow::Error::msg)?;
             apply_overlay_window(app.handle(), &initial_settings, true)
                 .map_err(anyhow::Error::msg)?;
 
@@ -803,8 +826,20 @@ pub fn run(args: Args) {
             preview_spoken_voice,
             stop_spoken_voice_preview
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Hen Local Translator");
+        .build(tauri::generate_context!())
+        .expect("failed to build Hen Local Translator")
+        .run(|app, event| {
+            if let tauri::RunEvent::Ready = event {
+                let settings = {
+                    let state = app.state::<AppState>();
+                    let preferences = state.preferences.lock();
+                    TranslationSettings::from(&*preferences)
+                };
+                if let Err(error) = apply_native_identity(app, &settings) {
+                    log::error!("Could not apply native application identity: {error}");
+                }
+            }
+        });
 }
 
 #[cfg(test)]
@@ -829,5 +864,6 @@ mod tests {
             original.translation_input_device,
             updated.translation_input_device
         );
+        assert_eq!(original.accent_theme, updated.accent_theme);
     }
 }

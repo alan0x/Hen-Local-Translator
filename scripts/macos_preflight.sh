@@ -21,8 +21,8 @@ fi
 TRANSLATION_DATAFLOW_PATH=""
 if [[ -f "$APP_RESOURCES/dataflow/translation_qwen35.yml" ]]; then
   TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/dataflow/translation_qwen35.yml"
-elif [[ -f "$APP_RESOURCES/apps/hen-local-translator/dataflow/translation_qwen35.yml" ]]; then
-  TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/apps/hen-local-translator/dataflow/translation_qwen35.yml"
+elif [[ -f "$APP_RESOURCES/hen-local-translator-shell/dataflow/translation_qwen35.yml" ]]; then
+  TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/hen-local-translator-shell/dataflow/translation_qwen35.yml"
 fi
 
 if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator-bin" ]]; then

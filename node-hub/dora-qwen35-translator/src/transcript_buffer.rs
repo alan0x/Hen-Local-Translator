@@ -19,10 +19,6 @@ impl TranscriptBuffer {
         &self.stable_buffer
     }
 
-    pub fn active_burst_id(&self) -> Option<i64> {
-        self.active_burst_id
-    }
-
     pub fn active_burst_text(&self) -> &str {
         &self.active_burst_text
     }

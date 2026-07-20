@@ -61,13 +61,20 @@ impl RepetitionPenaltyMask {
     pub fn new(vocab_size: usize, penalty: f32) -> Result<Self, Exception> {
         let mask = Array::zeros::<f32>(&[vocab_size as i32])?;
         let indices = Array::arange::<_, i32>(None, vocab_size as i32, None)?;
-        Ok(Self { mask, indices, penalty })
+        Ok(Self {
+            mask,
+            indices,
+            penalty,
+        })
     }
 
     /// Record that a token was generated (updates the mask on GPU).
     pub fn record_token(&mut self, token: u32) -> Result<(), Exception> {
         let token_arr = Array::from_int(token as i32);
-        let one_hot = self.indices.eq(&token_arr)?.as_dtype(mlx_rs::Dtype::Float32)?;
+        let one_hot = self
+            .indices
+            .eq(&token_arr)?
+            .as_dtype(mlx_rs::Dtype::Float32)?;
         self.mask = mlx_rs::ops::maximum(&self.mask, &one_hot)?;
         Ok(())
     }
@@ -108,7 +115,17 @@ pub fn sample_logits(
     generated_tokens: &[u32],
     rng_key: Option<&mut SamplingKey>,
 ) -> Result<u32, Exception> {
-    sample_logits_with_mask(logits, temperature, top_k, top_p, repetition_penalty, generated_tokens, rng_key, None, None)
+    sample_logits_with_mask(
+        logits,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        generated_tokens,
+        rng_key,
+        None,
+        None,
+    )
 }
 
 /// Full-featured sampling with pre-built suppression mask and GPU penalty mask.

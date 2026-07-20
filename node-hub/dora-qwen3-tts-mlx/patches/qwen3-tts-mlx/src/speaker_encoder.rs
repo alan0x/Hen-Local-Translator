@@ -8,11 +8,11 @@
 
 use std::collections::HashMap;
 
-use mlx_rs::{array, Array};
 use mlx_rs::module::{Module, Param};
 use mlx_rs::nn;
 use mlx_rs::ops;
 use mlx_rs::ops::indexing::IndexOp;
+use mlx_rs::{array, Array};
 
 use crate::error::{Error, Result};
 
@@ -222,7 +222,7 @@ impl SeRes2NetBlock {
 /// ASP: computes attention-weighted mean and std over time dimension.
 /// Output: [B, 1, 2*C]
 struct AttentiveStatisticsPooling {
-    tdnn: TdnnBlock, // 3*C → attn_channels, k=1
+    tdnn: TdnnBlock,  // 3*C → attn_channels, k=1
     conv: nn::Conv1d, // attn_channels → C, k=1
 }
 
@@ -235,20 +235,14 @@ impl AttentiveStatisticsPooling {
 
         // Compute mean and std over time
         let mean = ops::mean_axis(x, 1, true)?; // [B, 1, C]
-        // Broadcast mean to [B, T, C]
-        let mean_broadcast = ops::broadcast_to(
-            &mean,
-            &[x.dim(0) as i32, t, x.dim(2) as i32],
-        )?;
+                                                // Broadcast mean to [B, T, C]
+        let mean_broadcast = ops::broadcast_to(&mean, &[x.dim(0) as i32, t, x.dim(2) as i32])?;
 
         // Std: sqrt(mean((x - mean)^2))
         let diff = x.subtract(&mean_broadcast)?;
         let var = ops::mean_axis(&diff.multiply(&diff)?, 1, true)?;
         let std = ops::sqrt(&var.add(&array!(1e-5f32))?)?;
-        let std_broadcast = ops::broadcast_to(
-            &std,
-            &[x.dim(0) as i32, t, x.dim(2) as i32],
-        )?;
+        let std_broadcast = ops::broadcast_to(&std, &[x.dim(0) as i32, t, x.dim(2) as i32])?;
 
         // Concat [x, mean, std] along channel: [B, T, 3*C]
         let cat = ops::concatenate_axis(&[x, &mean_broadcast, &std_broadcast], 2)?;
@@ -264,16 +258,9 @@ impl AttentiveStatisticsPooling {
         let w_mean = ops::sum_axis(&weighted, 1, true)?; // [B, 1, C]
 
         // Weighted std: sqrt(sum((x - w_mean)^2 * attn, dim=T))
-        let w_mean_broadcast = ops::broadcast_to(
-            &w_mean,
-            &[x.dim(0) as i32, t, x.dim(2) as i32],
-        )?;
+        let w_mean_broadcast = ops::broadcast_to(&w_mean, &[x.dim(0) as i32, t, x.dim(2) as i32])?;
         let diff2 = x.subtract(&w_mean_broadcast)?;
-        let w_var = ops::sum_axis(
-            &diff2.multiply(&diff2)?.multiply(&attn)?,
-            1,
-            true,
-        )?;
+        let w_var = ops::sum_axis(&diff2.multiply(&diff2)?.multiply(&attn)?, 1, true)?;
         let w_std = ops::sqrt(&w_var.add(&array!(1e-5f32))?)?;
 
         // Output: cat([w_mean, w_std], channel) → [B, 1, 2*C]
@@ -289,11 +276,11 @@ impl AttentiveStatisticsPooling {
 /// Input: mel spectrogram [B, T, n_mels]
 /// Output: speaker embedding [B, enc_dim]
 pub struct SpeakerEncoder {
-    initial_tdnn: TdnnBlock,           // blocks.0: mel_dim → enc_channels[0]
+    initial_tdnn: TdnnBlock,                // blocks.0: mel_dim → enc_channels[0]
     se_res2net_blocks: Vec<SeRes2NetBlock>, // blocks.1-3
-    mfa: TdnnBlock,                    // Multi-feature aggregation
+    mfa: TdnnBlock,                         // Multi-feature aggregation
     asp: AttentiveStatisticsPooling,
-    fc: nn::Conv1d,                    // 2*enc_channels[4] → enc_dim, k=1
+    fc: nn::Conv1d, // 2*enc_channels[4] → enc_dim, k=1
     fc_bias: Option<Array>,
     enc_dim: i32,
 }
@@ -414,7 +401,13 @@ pub fn compute_speaker_mel(samples: &[f32], config: &SpeakerMelConfig) -> Result
     }
 
     // Mel filterbank (Slaney normalization)
-    let filterbank = slaney_mel_filterbank(n_fft as i32, n_mels as i32, config.sample_rate as i32, config.fmin, config.fmax);
+    let filterbank = slaney_mel_filterbank(
+        n_fft as i32,
+        n_mels as i32,
+        config.sample_rate as i32,
+        config.fmin,
+        config.fmax,
+    );
 
     // Apply mel filterbank: [n_frames, n_freqs] × [n_mels, n_freqs]^T → [n_frames, n_mels]
     let mut mel_spec = vec![0.0f32; n_frames * n_mels];
@@ -440,7 +433,13 @@ pub fn compute_speaker_mel(samples: &[f32], config: &SpeakerMelConfig) -> Result
 }
 
 /// Slaney-normalized mel filterbank.
-fn slaney_mel_filterbank(n_fft: i32, n_mels: i32, sample_rate: i32, fmin: f32, fmax: f32) -> Vec<f32> {
+fn slaney_mel_filterbank(
+    n_fft: i32,
+    n_mels: i32,
+    sample_rate: i32,
+    fmin: f32,
+    fmax: f32,
+) -> Vec<f32> {
     let n_freqs = (n_fft / 2 + 1) as usize;
 
     // Hz to mel (Slaney: linear below 1000Hz, log above)
@@ -559,7 +558,15 @@ fn load_tdnn(
     needs_transpose: bool,
 ) -> Result<TdnnBlock> {
     let padding = ((kernel_size - 1) * dilation) / 2; // same padding
-    let (conv, _) = load_conv1d(weights, &format!("{prefix}.conv"), 1, padding, dilation, 1, needs_transpose)?;
+    let (conv, _) = load_conv1d(
+        weights,
+        &format!("{prefix}.conv"),
+        1,
+        padding,
+        dilation,
+        1,
+        needs_transpose,
+    )?;
     Ok(TdnnBlock { conv })
 }
 
@@ -603,8 +610,24 @@ fn load_se_block(
     prefix: &str,
     needs_transpose: bool,
 ) -> Result<SeBlock> {
-    let (conv1, _) = load_conv1d(weights, &format!("{prefix}.conv1"), 1, 0, 1, 1, needs_transpose)?;
-    let (conv2, _) = load_conv1d(weights, &format!("{prefix}.conv2"), 1, 0, 1, 1, needs_transpose)?;
+    let (conv1, _) = load_conv1d(
+        weights,
+        &format!("{prefix}.conv1"),
+        1,
+        0,
+        1,
+        1,
+        needs_transpose,
+    )?;
+    let (conv2, _) = load_conv1d(
+        weights,
+        &format!("{prefix}.conv2"),
+        1,
+        0,
+        1,
+        1,
+        needs_transpose,
+    )?;
     Ok(SeBlock { conv1, conv2 })
 }
 
@@ -698,7 +721,13 @@ pub fn load_speaker_encoder(
 
     // ASP: Attentive Statistics Pooling
     // TDNN: 3*1536=4608 → attn_channels
-    let asp_tdnn = load_tdnn(weights, &format!("{prefix}.asp.tdnn"), 1, 1, needs_transpose)?;
+    let asp_tdnn = load_tdnn(
+        weights,
+        &format!("{prefix}.asp.tdnn"),
+        1,
+        1,
+        needs_transpose,
+    )?;
     let (asp_conv, _) = load_conv1d(
         weights,
         &format!("{prefix}.asp.conv"),

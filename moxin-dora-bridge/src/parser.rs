@@ -4,9 +4,7 @@
 //! - Node definitions and connections
 //! - Moxin dynamic nodes (moxin-xxx)
 //! - Environment variable requirements
-//! - Log sources for system log widget
 
-use crate::data::LogLevel;
 use crate::error::BridgeResult;
 use crate::MoxinNodeType;
 use std::collections::HashMap;
@@ -23,10 +21,6 @@ pub struct ParsedDataflow {
     pub moxin_nodes: Vec<MoxinNodeSpec>,
     /// Environment variable requirements
     pub env_requirements: Vec<EnvRequirement>,
-    /// Log sources for system log widget
-    pub log_sources: Vec<LogSource>,
-    /// Raw YAML for reference
-    pub raw_yaml: serde_yaml::Value,
 }
 
 /// Specification for a Moxin dynamic node
@@ -101,19 +95,6 @@ pub struct EnvRequirement {
     pub used_by: Vec<String>,
 }
 
-/// Log source for system log widget
-#[derive(Debug, Clone)]
-pub struct LogSource {
-    /// Source node ID
-    pub node_id: String,
-    /// Output ID (e.g., "log", "status")
-    pub output_id: String,
-    /// Display name for the UI
-    pub display_name: String,
-    /// Default log level filter
-    pub default_level: LogLevel,
-}
-
 /// Dataflow parser
 pub struct DataflowParser;
 
@@ -132,7 +113,6 @@ impl DataflowParser {
         let mut nodes = Vec::new();
         let mut moxin_nodes = Vec::new();
         let mut env_requirements = Vec::new();
-        let mut log_sources = Vec::new();
 
         // Parse nodes array
         if let Some(nodes_array) = raw_yaml.get("nodes").and_then(|n| n.as_sequence()) {
@@ -146,21 +126,6 @@ impl DataflowParser {
                             inputs: parsed.inputs.clone(),
                             outputs: parsed.outputs.clone(),
                         });
-                    }
-
-                    // Extract log sources
-                    for output in &parsed.outputs {
-                        if output.ends_with("_log")
-                            || output == "log"
-                            || output.ends_with("_status")
-                        {
-                            log_sources.push(LogSource {
-                                node_id: parsed.id.clone(),
-                                output_id: output.clone(),
-                                display_name: Self::format_display_name(&parsed.id),
-                                default_level: LogLevel::Info,
-                            });
-                        }
                     }
 
                     // Extract env requirements
@@ -183,8 +148,6 @@ impl DataflowParser {
             nodes,
             moxin_nodes,
             env_requirements,
-            log_sources,
-            raw_yaml,
         })
     }
 
@@ -288,23 +251,6 @@ impl DataflowParser {
             env,
             is_dynamic,
         })
-    }
-
-    /// Format node ID as display name
-    fn format_display_name(node_id: &str) -> String {
-        node_id
-            .replace('_', " ")
-            .replace('-', " ")
-            .split_whitespace()
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    None => String::new(),
-                    Some(first) => first.to_uppercase().chain(chars).collect(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
     }
 
     /// Add or update env requirement
@@ -428,9 +374,5 @@ nodes:
 
         assert_eq!(parsed.moxin_nodes.len(), 1);
         assert_eq!(parsed.moxin_nodes[0].id, "moxin-translation-listener");
-
-        assert_eq!(parsed.log_sources.len(), 1);
-        assert_eq!(parsed.log_sources[0].node_id, "translator");
-        assert_eq!(parsed.log_sources[0].output_id, "log");
     }
 }

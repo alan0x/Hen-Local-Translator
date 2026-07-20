@@ -5,7 +5,7 @@
 //!
 //! ## Architecture
 //!
-//! Each widget type (audio player, chat, logs) has its own bridge that:
+//! Each active runtime node has its own bridge that:
 //! 1. Connects to Dora as a dynamic node
 //! 2. Receives data from Dora inputs
 //! 3. Pushes data to [`SharedDoraState`](crate::SharedDoraState) for UI consumption
@@ -22,8 +22,6 @@
 //! | Bridge | Node ID | Purpose |
 //! |--------|---------|---------|
 //! | AudioPlayerBridge | `moxin-audio-player` | Receives TTS audio |
-//! | PromptInputBridge | `moxin-prompt-input` | Receives chat messages |
-//! | SystemLogBridge | `moxin-system-log` | Receives log entries |
 //!
 //! ## Connection States
 //!

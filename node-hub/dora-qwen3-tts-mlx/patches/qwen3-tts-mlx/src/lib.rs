@@ -1085,8 +1085,10 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let model_dir =
-            std::env::temp_dir().join(format!("qwen3-tts-tokenizer-test-{}-{unique}", std::process::id()));
+        let model_dir = std::env::temp_dir().join(format!(
+            "qwen3-tts-tokenizer-test-{}-{unique}",
+            std::process::id()
+        ));
         fs::create_dir_all(&model_dir).unwrap();
         fs::write(
             model_dir.join("vocab.json"),
@@ -1124,19 +1126,17 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let model_dir =
-            std::env::temp_dir().join(format!("qwen3-tts-regex-test-{}-{unique}", std::process::id()));
+        let model_dir = std::env::temp_dir().join(format!(
+            "qwen3-tts-regex-test-{}-{unique}",
+            std::process::id()
+        ));
         fs::create_dir_all(&model_dir).unwrap();
         fs::write(
             model_dir.join("vocab.json"),
             r#"{"a":0,"Ġ":1,"ĠĠ":2,"Ġa":3}"#,
         )
         .unwrap();
-        fs::write(
-            model_dir.join("merges.txt"),
-            "#version: 0.2\nĠ Ġ\nĠ a\n",
-        )
-        .unwrap();
+        fs::write(model_dir.join("merges.txt"), "#version: 0.2\nĠ Ġ\nĠ a\n").unwrap();
 
         let tokenizer = load_bpe_tokenizer(&model_dir).unwrap();
         let encoding = tokenizer.encode("a  a", false).unwrap();
@@ -1144,7 +1144,6 @@ mod tests {
         fs::remove_dir_all(&model_dir).unwrap();
         assert_eq!(encoding.get_ids(), &[0, 1, 3]);
     }
-
 }
 
 /// Load a BPE tokenizer from vocab.json + merges.txt (Qwen2 format).

@@ -64,7 +64,7 @@ impl TranslationDisplayState {
                     self.pending_completed_sources.insert(commit_id, text);
                     self.try_finalize_complete_pair(commit_id, max_history)
                 } else {
-                    // Legacy fallback if complete source arrives without commit_id.
+                    // Metadata-free safety path for malformed upstream events.
                     self.current_source_text = text;
                     false
                 }

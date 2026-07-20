@@ -9,10 +9,7 @@ use crate::controller::DataflowController;
 use crate::error::{BridgeError, BridgeResult};
 use crate::parser::MoxinNodeSpec;
 use crate::shared_state::SharedDoraState;
-use crate::widgets::{
-    AecInputBridge, AsrListenerBridge, AudioInputBridge, AudioPlayerBridge, PromptInputBridge,
-    SystemLogBridge, TranslationListenerBridge,
-};
+use crate::widgets::{AecInputBridge, AudioPlayerBridge, TranslationListenerBridge};
 use crate::MoxinNodeType;
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -99,37 +96,9 @@ impl DynamicNodeDispatcher {
                     &node_spec.id,
                     shared_state.clone(),
                 )),
-                MoxinNodeType::SystemLog => Box::new(SystemLogBridge::with_shared_state(
-                    &node_spec.id,
-                    shared_state.clone(),
-                )),
-                MoxinNodeType::PromptInput => Box::new(PromptInputBridge::with_shared_state(
-                    &node_spec.id,
-                    shared_state.clone(),
-                )),
                 MoxinNodeType::MicInput => Box::new(AecInputBridge::with_shared_state(
                     &node_spec.id,
                     shared_state.clone(),
-                )),
-                MoxinNodeType::ChatViewer => {
-                    // TODO: Implement ChatViewerBridge
-                    continue;
-                }
-                MoxinNodeType::ParticipantPanel => {
-                    // ParticipantPanel functionality consolidated into AudioPlayerBridge
-                    // No separate bridge needed - AudioPlayerBridge now handles LED visualization
-                    info!("Skipping ParticipantPanel bridge - consolidated into AudioPlayerBridge");
-                    continue;
-                }
-                MoxinNodeType::AsrListener => Box::new(AsrListenerBridge::with_shared_state(
-                    &node_spec.id,
-                    shared_state.clone(),
-                )),
-                MoxinNodeType::AudioInput => Box::new(AudioInputBridge::with_shared_state(
-                    &node_spec.id,
-                    shared_state
-                        .clone()
-                        .expect("AudioInputBridge requires shared state"),
                 )),
                 MoxinNodeType::TranslationListener => {
                     Box::new(TranslationListenerBridge::with_shared_state(

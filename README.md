@@ -57,14 +57,12 @@ npm --prefix hen-local-translator-shell/ui run check
 cargo test -p hen-local-translator-shell
 ```
 
-Some source directories still carry the original fork names during the staged cleanup, but the active desktop shell and product surface are now Hen Local Translator.
-
 ## Translation Dataflow
 
 The live translation pipeline is defined in:
 
 ```text
-apps/hen-local-translator/dataflow/translation_qwen35.yml
+hen-local-translator-shell/dataflow/translation_qwen35.yml
 ```
 
 Runtime graph:
@@ -76,9 +74,17 @@ moxin-mic-input -> dora-qwen3-asr -> dora-qwen35-translator -> moxin-translation
 ## macOS Packaging
 
 ```bash
-bash scripts/build_macos_app.sh \
-  --icon moxin-widgets/resources/hen_local_icon.png
+bash scripts/build_macos_app.sh
 bash scripts/build_macos_dmg.sh
+```
+
+The app bundle uses the checked-in Hen Local `.icns` icon by default. Regenerate all
+platform icon formats from the original artwork with:
+
+```bash
+python3 scripts/generate_app_icons.py \
+  --source hen-local-translator-shell/icons/HenLocal_logo.jpeg \
+  --output-dir hen-local-translator-shell/icons
 ```
 
 The generated app defaults to:
