@@ -81,6 +81,7 @@ if [[ ! -d "$APP_PATH" ]]; then
 fi
 
 WORKSPACE_VERSION="$(read_workspace_version)"
+WORKSPACE_MARKETING_VERSION="${WORKSPACE_VERSION%%[-+]*}"
 APP_VERSION="$(read_app_version)"
 if [[ -z "$WORKSPACE_VERSION" ]]; then
   echo "Failed to determine the workspace version from Cargo.toml"
@@ -90,8 +91,8 @@ if [[ -z "$APP_VERSION" ]]; then
   echo "Failed to determine the app bundle version"
   exit 1
 fi
-if [[ "$APP_VERSION" != "$WORKSPACE_VERSION" ]]; then
-  echo "App bundle version $APP_VERSION does not match the workspace version $WORKSPACE_VERSION"
+if [[ "$APP_VERSION" != "$WORKSPACE_MARKETING_VERSION" ]]; then
+  echo "App bundle version $APP_VERSION does not match the workspace marketing version $WORKSPACE_MARKETING_VERSION"
   echo "Rebuild the app after running: node scripts/version.mjs sync"
   exit 1
 fi

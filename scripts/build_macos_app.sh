@@ -20,6 +20,8 @@ PROFILE="release"
 ICON_PATH="$ROOT_DIR/hen-local-translator-shell/icons/icon.icns"
 OUT_DIR="$ROOT_DIR/dist"
 VERSION="$WORKSPACE_VERSION"
+MARKETING_VERSION="${VERSION%%[-+]*}"
+BUILD_VERSION="${HEN_LOCAL_BUILD_VERSION:-$MARKETING_VERSION}"
 BUILD_TARGET_DIR="${HEN_LOCAL_CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/hen-local-translator-cargo-target}"
 
 if [[ "$BUILD_TARGET_DIR" == *" "* ]]; then
@@ -88,6 +90,14 @@ done
 if [[ "$VERSION" != "$WORKSPACE_VERSION" ]]; then
   echo "App version $VERSION does not match the workspace version $WORKSPACE_VERSION"
   echo "Set the version with: node scripts/version.mjs set <version>"
+  exit 1
+fi
+if [[ ! "$MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "macOS marketing version must contain three numeric components: $MARKETING_VERSION"
+  exit 1
+fi
+if [[ ! "$BUILD_VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+  echo "macOS build version must contain one to three numeric components: $BUILD_VERSION"
   exit 1
 fi
 
@@ -346,9 +356,9 @@ cat > "$PLIST_PATH" <<EOF
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleVersion</key>
-  <string>${VERSION}</string>
+  <string>${BUILD_VERSION}</string>
   <key>CFBundleShortVersionString</key>
-  <string>${VERSION}</string>
+  <string>${MARKETING_VERSION}</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>

@@ -14,6 +14,8 @@ and releases use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A single-source application version command and CI validation.
 - A tag-driven workflow that builds an Apple Silicon DMG and creates a draft
   GitHub Release.
+- Developer ID hardened-runtime signing and Apple notarization/stapling for
+  release DMGs.
 
 ## 1.1.0 - 2026-07-20
 

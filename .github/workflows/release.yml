@@ -49,6 +49,7 @@ jobs:
     timeout-minutes: 180
     env:
       CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: "1.92.0"
     steps:
       - name: Check out tagged source
         uses: actions/checkout@v4
@@ -60,11 +61,66 @@ jobs:
           cache: npm
           cache-dependency-path: hen-local-translator-shell/ui/package-lock.json
 
-      - name: Select current stable Rust
+      - name: Install pinned Rust toolchain
         run: |
-          rustup update stable --no-self-update
-          rustup default stable
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$RUST_TOOLCHAIN"
           rustc --version
+
+      - name: Require Apple release credentials
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        shell: bash
+        run: |
+          required=(
+            APPLE_CERTIFICATE_P12
+            APPLE_CERTIFICATE_PASSWORD
+            APPLE_ID
+            APPLE_APP_SPECIFIC_PASSWORD
+            APPLE_TEAM_ID
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificate
+        id: signing
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        shell: bash
+        run: |
+          certificate_path="$RUNNER_TEMP/developer-id.p12"
+          keychain_path="$RUNNER_TEMP/hen-local-signing.keychain-db"
+          keychain_password="$(openssl rand -base64 32)"
+          printf '%s' "$APPLE_CERTIFICATE_P12" | base64 -D > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" \
+            -k "$keychain_path" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$keychain_password" \
+            "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -n 1)"
+          if [[ -z "$identity" ]]; then
+            echo "The certificate does not contain a Developer ID Application identity" >&2
+            exit 1
+          fi
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
 
       - name: Cache Cargo downloads
         uses: actions/cache@v4
@@ -96,10 +152,16 @@ jobs:
           test -d "$app"
           test -x "$app/Contents/MacOS/hen-local-translator"
           bundle_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
-          test "$bundle_version" = "$VERSION"
+          marketing_version="${VERSION%%[-+]*}"
+          test "$bundle_version" = "$marketing_version"
           file "$app/Contents/MacOS/hen-local-translator-bin" | grep -q arm64
 
-      - name: Build and verify DMG
+      - name: Sign application bundle
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: bash scripts/macos_sign_and_notarize.sh --app "dist/Hen Local Translator.app"
+
+      - name: Build DMG
         env:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
@@ -107,13 +169,30 @@ jobs:
           dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
           test -f "$dmg"
           hdiutil verify "$dmg"
+
+      - name: Sign and notarize DMG
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: bash scripts/macos_sign_and_notarize.sh --dmg "dist/Hen-Local-Translator-v${VERSION}.dmg"
+
+      - name: Verify notarized release artifact
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
+          codesign --verify --verbose=2 "$dmg"
+          xcrun stapler validate "$dmg"
           cd dist
           shasum -a 256 "Hen-Local-Translator-v${VERSION}.dmg" > SHA256SUMS
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Hen-Local-Translator-v${{ needs.validate.outputs.version }}-macos-arm64-unsigned
+          name: Hen-Local-Translator-v${{ needs.validate.outputs.version }}-macos-arm64
           path: |
             dist/Hen-Local-Translator-v${{ needs.validate.outputs.version }}.dmg
             dist/SHA256SUMS
@@ -128,7 +207,7 @@ jobs:
         shell: bash
         run: |
           dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
-          notes="Automated unsigned macOS build. Keep this release as a draft until Apple signing and notarization are complete."
+          notes="Automated Developer ID signed and Apple-notarized macOS build. Keep this release as a draft until installation and update smoke tests pass."
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
             if [[ "$is_draft" != "true" ]]; then

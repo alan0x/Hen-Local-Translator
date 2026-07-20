@@ -96,13 +96,27 @@ git push origin v1.2.0-beta.1
 ```
 
 The tag must exactly match `v` plus the workspace version. The release workflow
-uses an Apple Silicon macOS runner, installs the pinned Dora CLI, builds and
-verifies the app and DMG, creates checksums, and opens a draft GitHub Release.
+uses an Apple Silicon macOS runner, installs the pinned Dora CLI, builds the app,
+signs it with Developer ID, notarizes and staples the DMG, creates checksums,
+and opens a draft GitHub Release.
 
-Until Apple signing and notarization are added, automated builds are explicitly
-marked unsigned and must remain drafts. See [CHANGELOG.md](CHANGELOG.md) for the
-product-facing release history and [ROADMAP.md](ROADMAP.md) for release-readiness
-work.
+Configure these GitHub Actions secrets before pushing a release tag:
+
+- `APPLE_CERTIFICATE_P12`: base64-encoded Developer ID Application `.p12`
+- `APPLE_CERTIFICATE_PASSWORD`: password used when exporting the `.p12`
+- `APPLE_ID`: Apple Developer account email
+- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific Apple ID password
+- `APPLE_TEAM_ID`: ten-character Apple Developer team identifier
+
+The workflow deliberately fails before building when a credential is missing.
+Keep the resulting signed release as a draft until installation and update smoke
+tests pass. See [CHANGELOG.md](CHANGELOG.md) for the product-facing release
+history and [ROADMAP.md](ROADMAP.md) for release-readiness work.
+
+Prerelease tags retain their complete semantic version, such as
+`1.2.0-beta.1`. The generated macOS bundle uses the Apple-required numeric
+marketing/build version `1.2.0`, while the DMG and GitHub Release retain the full
+prerelease version.
 
 ## Translation Dataflow
 

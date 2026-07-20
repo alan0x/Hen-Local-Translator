@@ -25,11 +25,12 @@ Status notation:
 
 ## Current focus
 
-- 🔄 **In progress:** Phase 1: establish automated, signed, notarized, versioned macOS
-  releases through GitHub Releases.
+- ⛔ **Blocked:** Phase 1 release automation is implemented, but the first
+  signed/notarized run requires a Developer ID Application certificate and the
+  five documented GitHub Actions secrets.
 
-Next item: add Developer ID signing, hardened runtime, and Apple notarization to
-the draft release workflow.
+Next item: obtain/export the Developer ID Application certificate and configure
+the five required GitHub Actions secrets so signing/notarization can be tested.
 
 ## Product definition
 
@@ -324,6 +325,10 @@ Goal: validate the single subscription before introducing more pricing.
 
 ## Progress log
 
+- 2026-07-20: Added hardened-runtime signing for nested Mach-O files and the app,
+  plus Developer ID DMG signing, Apple notarization, stapling, and Gatekeeper
+  assessment. End-to-end execution is blocked until the Developer ID identity
+  and Apple/GitHub secrets are configured.
 - 2026-07-20: Added a tag-driven Apple Silicon release workflow that validates
   the tag, uses locked dependencies, builds and verifies the app/DMG, generates
   checksums, uploads a workflow artifact, and creates an explicitly unsigned

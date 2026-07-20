@@ -1547,7 +1547,7 @@ dependencies = [
 
 [[package]]
 name = "dora-qwen3-asr"
-version = "1.1.0"
+version = "1.2.0-beta.1"
 dependencies = [
  "anyhow",
  "arrow",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "dora-qwen3-tts-mlx"
-version = "1.1.0"
+version = "1.2.0-beta.1"
 dependencies = [
  "anyhow",
  "arrow",
@@ -1579,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "dora-qwen35-translator"
-version = "1.1.0"
+version = "1.2.0-beta.1"
 dependencies = [
  "anyhow",
  "arrow",
@@ -2416,7 +2416,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "hen-local-init"
-version = "1.1.0"
+version = "1.2.0-beta.1"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "hen-local-translator-shell"
-version = "1.1.0"
+version = "1.2.0-beta.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -3504,7 +3504,7 @@ dependencies = [
 
 [[package]]
 name = "moxin-dora-bridge"
-version = "1.1.0"
+version = "1.2.0-beta.1"
 dependencies = [
  "anyhow",
  "arrow",
