@@ -85,8 +85,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ "$VERSION" != "$WORKSPACE_VERSION" ]]; then
+  echo "App version $VERSION does not match the workspace version $WORKSPACE_VERSION"
+  echo "Set the version with: node scripts/version.mjs set <version>"
+  exit 1
+fi
+
 echo "Installing and building the Svelte frontend..."
-npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" install
+if [[ "${CI:-}" == "true" ]]; then
+  npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" ci
+else
+  npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" install
+fi
 npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" run build
 
 echo "Building binaries..."
@@ -106,9 +116,9 @@ run_cargo_build() {
   local mlx_prebuilt_path=""
   mlx_prebuilt_path="$(resolve_mlx_prebuilt_path "$target_dir" "$profile")"
   if [[ -n "$mlx_prebuilt_path" ]]; then
-    MLX_PREBUILT_PATH="$mlx_prebuilt_path" cargo build "$@"
+    MLX_PREBUILT_PATH="$mlx_prebuilt_path" cargo build --locked "$@"
   else
-    cargo build "$@"
+    cargo build --locked "$@"
   fi
 }
 

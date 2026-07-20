@@ -3,14 +3,11 @@
 **/*.rs.bk
 *.pdb
 
-# Cargo.lock for applications (keep for reproducible builds)
-# Uncomment the next line if you want to ignore it:
-# Cargo.lock
+# Cargo.lock is committed because this workspace builds an application.
 
 # Build artifacts
 debug/
 target/
-Cargo.lock
 
 # Editor / IDE
 .vscode/

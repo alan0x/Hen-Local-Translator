@@ -4,6 +4,12 @@ Offline live speech translation for macOS, built with Rust, Tauri 2, Svelte, Dor
 
 Hen Local Translator focuses on one workflow: capture microphone or system audio, transcribe it with Qwen3-ASR, translate committed speech chunks with the Qwen3.5 translator node, and display bilingual subtitles in a floating overlay.
 
+## Product Roadmap
+
+Release engineering, subscriptions, device licensing, and usage-tracking work
+are tracked in [ROADMAP.md](ROADMAP.md). Keep that checklist current whenever a
+task starts, finishes, changes scope, or becomes blocked.
+
 ## Features
 
 - Live translation from microphone or macOS system audio
@@ -55,7 +61,48 @@ Useful checks:
 ```bash
 npm --prefix hen-local-translator-shell/ui run check
 cargo test -p hen-local-translator-shell
+node scripts/version.mjs check
 ```
+
+## Application Version
+
+The `[workspace.package]` version in `Cargo.toml` is the single source of truth.
+Use the version command instead of editing Tauri or npm metadata by hand:
+
+```bash
+# Verify that every application version agrees
+node scripts/version.mjs check
+
+# Set a new version and synchronize all metadata
+node scripts/version.mjs set 1.2.0
+
+# Repair metadata using the current Cargo.toml version
+node scripts/version.mjs sync
+```
+
+macOS app and DMG builds reject manual version overrides that do not match the
+workspace version. CI runs the same version check for every pull request and
+push to `main`.
+
+## Creating a Draft Release
+
+Release builds are created from version tags. First update the version, commit
+the complete change, then tag that exact commit:
+
+```bash
+node scripts/version.mjs set 1.2.0-beta.1
+git tag -a v1.2.0-beta.1 -m "Hen Local Translator 1.2.0 beta 1"
+git push origin v1.2.0-beta.1
+```
+
+The tag must exactly match `v` plus the workspace version. The release workflow
+uses an Apple Silicon macOS runner, installs the pinned Dora CLI, builds and
+verifies the app and DMG, creates checksums, and opens a draft GitHub Release.
+
+Until Apple signing and notarization are added, automated builds are explicitly
+marked unsigned and must remain drafts. See [CHANGELOG.md](CHANGELOG.md) for the
+product-facing release history and [ROADMAP.md](ROADMAP.md) for release-readiness
+work.
 
 ## Translation Dataflow
 

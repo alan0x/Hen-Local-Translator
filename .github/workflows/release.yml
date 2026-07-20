@@ -1,0 +1,154 @@
+name: Build draft GitHub release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      prerelease: ${{ steps.metadata.outputs.prerelease }}
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate versions and tag
+        id: metadata
+        shell: bash
+        run: |
+          node scripts/version.mjs check
+          node scripts/version.mjs check-tag "$GITHUB_REF_NAME"
+          version="$(node scripts/version.mjs current)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-macos:
+    name: Build Apple Silicon macOS release
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 180
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: hen-local-translator-shell/ui/package-lock.json
+
+      - name: Select current stable Rust
+        run: |
+          rustup update stable --no-self-update
+          rustup default stable
+          rustc --version
+
+      - name: Cache Cargo downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: macos-arm64-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            macos-arm64-cargo-
+
+      - name: Install pinned Dora CLI
+        run: cargo install dora-cli --version 0.4.0 --locked
+
+      - name: Verify runner and release metadata
+        run: |
+          test "$(uname -m)" = "arm64"
+          node scripts/version.mjs check
+          node scripts/version.mjs check-tag "$GITHUB_REF_NAME"
+
+      - name: Build application bundle
+        run: HEN_LOCAL_CARGO_TARGET_DIR="$RUNNER_TEMP/hen-local-target" bash scripts/build_macos_app.sh
+
+      - name: Verify application bundle
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          app="dist/Hen Local Translator.app"
+          test -d "$app"
+          test -x "$app/Contents/MacOS/hen-local-translator"
+          bundle_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"
+          test "$bundle_version" = "$VERSION"
+          file "$app/Contents/MacOS/hen-local-translator-bin" | grep -q arm64
+
+      - name: Build and verify DMG
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          bash scripts/build_macos_dmg.sh
+          dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
+          test -f "$dmg"
+          hdiutil verify "$dmg"
+          cd dist
+          shasum -a 256 "Hen-Local-Translator-v${VERSION}.dmg" > SHA256SUMS
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hen-Local-Translator-v${{ needs.validate.outputs.version }}-macos-arm64-unsigned
+          path: |
+            dist/Hen-Local-Translator-v${{ needs.validate.outputs.version }}.dmg
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create or update draft GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        shell: bash
+        run: |
+          dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
+          notes="Automated unsigned macOS build. Keep this release as a draft until Apple signing and notarization are complete."
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
+            if [[ "$is_draft" != "true" ]]; then
+              echo "Refusing to replace assets on a published release" >&2
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" "$dmg" dist/SHA256SUMS --clobber
+          else
+            args=(
+              "$GITHUB_REF_NAME"
+              "$dmg"
+              dist/SHA256SUMS
+              --draft
+              --verify-tag
+              --title "Hen Local Translator ${VERSION}"
+              --generate-notes
+              --notes "$notes"
+            )
+            if [[ "$PRERELEASE" == "true" ]]; then
+              args+=(--prerelease)
+            fi
+            gh release create "${args[@]}"
+          fi

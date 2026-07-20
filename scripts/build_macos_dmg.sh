@@ -80,16 +80,27 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-if [[ -z "$VERSION" ]]; then
-  VERSION="$(read_app_version)"
-fi
-if [[ -z "$VERSION" ]]; then
-  VERSION="$(read_workspace_version)"
-fi
-if [[ -z "$VERSION" ]]; then
-  echo "Failed to determine version from app bundle or Cargo.toml"
+WORKSPACE_VERSION="$(read_workspace_version)"
+APP_VERSION="$(read_app_version)"
+if [[ -z "$WORKSPACE_VERSION" ]]; then
+  echo "Failed to determine the workspace version from Cargo.toml"
   exit 1
 fi
+if [[ -z "$APP_VERSION" ]]; then
+  echo "Failed to determine the app bundle version"
+  exit 1
+fi
+if [[ "$APP_VERSION" != "$WORKSPACE_VERSION" ]]; then
+  echo "App bundle version $APP_VERSION does not match the workspace version $WORKSPACE_VERSION"
+  echo "Rebuild the app after running: node scripts/version.mjs sync"
+  exit 1
+fi
+if [[ -n "$VERSION" && "$VERSION" != "$WORKSPACE_VERSION" ]]; then
+  echo "DMG version $VERSION does not match the workspace version $WORKSPACE_VERSION"
+  echo "Set the version with: node scripts/version.mjs set <version>"
+  exit 1
+fi
+VERSION="$WORKSPACE_VERSION"
 if [[ -z "$VOL_NAME" ]]; then
   VOL_NAME="$APP_NAME $VERSION Installer"
 fi
