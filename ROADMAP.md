@@ -25,12 +25,12 @@ Status notation:
 
 ## Current focus
 
-- ⛔ **Blocked:** Phase 1 release automation is implemented, but the first
-  signed/notarized run requires a Developer ID Application certificate and the
-  five documented GitHub Actions secrets.
+- 🔄 **In progress:** Run `v1.2.0-beta.1` through the GitHub release
+  workflow as an explicitly unsigned internal-test draft.
 
-Next item: obtain/export the Developer ID Application certificate and configure
-the five required GitHub Actions secrets so signing/notarization can be tested.
+Apple signing/notarization remains a production-release blocker. Once the paid
+Developer Program membership is active, configure the five required GitHub
+Actions secrets and rerun the release flow with a new prerelease version.
 
 ## Product definition
 
@@ -63,7 +63,7 @@ Not included at launch:
 - [x] Git history contains an older background GitHub updater prototype in
   commit `0b65455`.
 - [ ] The current Tauri application has a production updater integration.
-- [ ] The repository has an automated GitHub release workflow.
+- [x] The repository has an automated GitHub release workflow.
 - [ ] Release artifacts are Developer ID signed and Apple notarized.
 - [ ] Update artifacts are cryptographically signed and verified by the app.
 - [ ] Accounts, billing, subscriptions, and device licensing exist.
@@ -118,6 +118,8 @@ Goal: one Git tag produces a reproducible, trusted macOS release.
 - [ ] Configure Apple notarization credentials.
 - [ ] Generate the Tauri updater signing keypair.
 - [ ] Store all private credentials only in encrypted CI secrets.
+- [x] Permit an explicitly labeled unsigned draft for internal CI testing while
+  Apple Developer Program activation is pending.
 
 ### Acceptance criteria
 
@@ -325,6 +327,9 @@ Goal: validate the single subscription before introducing more pricing.
 
 ## Progress log
 
+- 2026-07-20: Allowed the release workflow to create a clearly labeled unsigned
+  internal-test draft when Apple credentials are unavailable; public release
+  remains blocked until Developer ID signing and notarization succeed.
 - 2026-07-20: Added hardened-runtime signing for nested Mach-O files and the app,
   plus Developer ID DMG signing, Apple notarization, stapling, and Gatekeeper
   assessment. End-to-end execution is blocked until the Developer ID identity

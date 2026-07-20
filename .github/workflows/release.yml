@@ -67,7 +67,8 @@ jobs:
           rustup default "$RUST_TOOLCHAIN"
           rustc --version
 
-      - name: Require Apple release credentials
+      - name: Select release signing mode
+        id: release-mode
         env:
           APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -76,6 +77,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         shell: bash
         run: |
+          missing=()
           required=(
             APPLE_CERTIFICATE_P12
             APPLE_CERTIFICATE_PASSWORD
@@ -85,13 +87,21 @@ jobs:
           )
           for name in "${required[@]}"; do
             if [[ -z "${!name}" ]]; then
-              echo "Missing required GitHub Actions secret: $name" >&2
-              exit 1
+              missing+=("$name")
             fi
           done
+          if (( ${#missing[@]} == 0 )); then
+            echo "signing=true" >> "$GITHUB_OUTPUT"
+            echo "All Apple credentials are available; producing a signed and notarized draft."
+          else
+            echo "signing=false" >> "$GITHUB_OUTPUT"
+            echo "Apple credentials are incomplete; producing an unsigned internal-test draft."
+            printf 'Missing secret: %s\n' "${missing[@]}"
+          fi
 
       - name: Import Developer ID certificate
         id: signing
+        if: steps.release-mode.outputs.signing == 'true'
         env:
           APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -157,6 +167,7 @@ jobs:
           file "$app/Contents/MacOS/hen-local-translator-bin" | grep -q arm64
 
       - name: Sign application bundle
+        if: steps.release-mode.outputs.signing == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
         run: bash scripts/macos_sign_and_notarize.sh --app "dist/Hen Local Translator.app"
@@ -171,6 +182,7 @@ jobs:
           hdiutil verify "$dmg"
 
       - name: Sign and notarize DMG
+        if: steps.release-mode.outputs.signing == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -180,12 +192,32 @@ jobs:
         run: bash scripts/macos_sign_and_notarize.sh --dmg "dist/Hen-Local-Translator-v${VERSION}.dmg"
 
       - name: Verify notarized release artifact
+        if: steps.release-mode.outputs.signing == 'true'
         env:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
           codesign --verify --verbose=2 "$dmg"
           xcrun stapler validate "$dmg"
+
+      - name: Mark unsigned internal test build
+        if: steps.release-mode.outputs.signing != 'true'
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        shell: bash
+        run: |
+          cat > dist/UNSIGNED-INTERNAL-TEST-BUILD.txt <<EOF
+          Hen Local Translator v${VERSION}
+
+          This build is unsigned and has not been notarized by Apple.
+          It is for internal testing only and must not be published to customers.
+          macOS Gatekeeper warnings are expected.
+          EOF
+
+      - name: Generate release checksums
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
           cd dist
           shasum -a 256 "Hen-Local-Translator-v${VERSION}.dmg" > SHA256SUMS
 
@@ -196,6 +228,7 @@ jobs:
           path: |
             dist/Hen-Local-Translator-v${{ needs.validate.outputs.version }}.dmg
             dist/SHA256SUMS
+            dist/UNSIGNED-INTERNAL-TEST-BUILD.txt
           if-no-files-found: error
           retention-days: 14
 
@@ -204,22 +237,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
           PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+          SIGNED: ${{ steps.release-mode.outputs.signing }}
         shell: bash
         run: |
           dmg="dist/Hen-Local-Translator-v${VERSION}.dmg"
-          notes="Automated Developer ID signed and Apple-notarized macOS build. Keep this release as a draft until installation and update smoke tests pass."
+          assets=("$dmg" dist/SHA256SUMS)
+          if [[ "$SIGNED" == "true" ]]; then
+            notes="Automated Developer ID signed and Apple-notarized macOS build. Keep this release as a draft until installation and update smoke tests pass."
+          else
+            notes="⚠️ UNSIGNED INTERNAL TEST BUILD. This build is not notarized, will trigger macOS Gatekeeper warnings, and must not be published to customers."
+            assets+=(dist/UNSIGNED-INTERNAL-TEST-BUILD.txt)
+          fi
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)"
             if [[ "$is_draft" != "true" ]]; then
               echo "Refusing to replace assets on a published release" >&2
               exit 1
             fi
-            gh release upload "$GITHUB_REF_NAME" "$dmg" dist/SHA256SUMS --clobber
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
           else
             args=(
               "$GITHUB_REF_NAME"
-              "$dmg"
-              dist/SHA256SUMS
+              "${assets[@]}"
               --draft
               --verify-tag
               --title "Hen Local Translator ${VERSION}"
