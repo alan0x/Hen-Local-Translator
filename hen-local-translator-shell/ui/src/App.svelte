@@ -18,6 +18,7 @@
     downloadUpdate,
     installDownloadedUpdate,
     listenRuntime,
+    listOutputDevices,
     openTranscriptHistory,
     openVoiceLab,
     previewSpokenVoice,
@@ -84,6 +85,7 @@
   let accountBusy = false;
   let accountError = '';
   let accountRefreshTimer: number | null = null;
+  let refreshingOutputDevices = false;
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
@@ -141,6 +143,30 @@
       await updateSettings(settings);
     } catch (error) {
       errorMessage = String(error);
+    }
+  }
+
+  async function refreshOutputDevices(): Promise<void> {
+    if (!payload || !settings || refreshingOutputDevices) return;
+    refreshingOutputDevices = true;
+    try {
+      const devices = await listOutputDevices();
+      if (devices.length > 0) {
+        payload.outputDevices = devices;
+        payload = { ...payload };
+        if (
+          settings.spokenTranslationOutputDevice !== null &&
+          !devices.includes(settings.spokenTranslationOutputDevice)
+        ) {
+          settings.spokenTranslationOutputDevice = null;
+          settings = { ...settings };
+          await persist();
+        }
+      }
+    } catch (error) {
+      errorMessage = String(error);
+    } finally {
+      refreshingOutputDevices = false;
     }
   }
 
@@ -613,8 +639,8 @@
           <div class="control-block">
             <span class="control-label">{tr('窗口模式', 'WINDOW MODE')}</span>
             <div class="segmented two">
-              <button class:active={!settings.overlayFullscreen} on:click={async () => { settings!.overlayFullscreen = false; settings = { ...settings! }; await persist(); }}>{tr('浮窗', 'FLOAT')}</button>
               <button class:active={settings.overlayFullscreen} on:click={async () => { settings!.overlayFullscreen = true; settings = { ...settings! }; await persist(); }}>{tr('全屏', 'FULLSCREEN')}</button>
+              <button class:active={!settings.overlayFullscreen} on:click={async () => { settings!.overlayFullscreen = false; settings = { ...settings! }; await persist(); }}>{tr('浮窗', 'FLOAT')}</button>
             </div>
           </div>
 
@@ -680,10 +706,13 @@
             </div>
           </div>
 
-          <div class:is-disabled={!settings.spokenTranslationEnabled} class="control-block output-device-control">
+          <label class:is-disabled={!settings.spokenTranslationEnabled} class="control-block output-device-control">
             <span class="control-label">{tr('输出设备', 'OUTPUT DEVICE')}</span>
-            <div class="system-output-note">{tr('跟随 Mac 系统默认', 'MAC SYSTEM DEFAULT')}</div>
-          </div>
+            <select disabled={!settings.spokenTranslationEnabled} bind:value={settings.spokenTranslationOutputDevice} on:mouseenter={refreshOutputDevices} on:focus={refreshOutputDevices} on:change={persist}>
+              <option value={null}>{tr('系统默认', 'SYSTEM DEFAULT')}</option>
+              {#each payload.outputDevices as device}<option value={device}>{device}</option>{/each}
+            </select>
+          </label>
         </div>
       </div>
     </section>

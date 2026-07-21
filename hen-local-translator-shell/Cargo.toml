@@ -1,5 +1,6 @@
 [package]
 name = "hen-local-translator-shell"
+default-run = "hen-local-translator"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,6 +16,7 @@ moxin-dora-bridge = { path = "../moxin-dora-bridge" }
 
 # Audio device discovery
 cpal.workspace = true
+hound = "3.5"
 
 # Runtime and channels
 tokio.workspace = true

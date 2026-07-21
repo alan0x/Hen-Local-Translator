@@ -1,8 +1,14 @@
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::Serialize;
 use std::{
-    collections::VecDeque,
+    fs,
+    path::PathBuf,
     process::{Child, Command, Stdio},
-    sync::mpsc::{self, Receiver, RecvTimeoutError, Sender},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        mpsc::{self, Receiver, Sender},
+        Arc,
+    },
     thread,
     time::Duration,
 };
@@ -20,9 +26,31 @@ enum SpeechCommand {
         enabled: bool,
         language: String,
         voice: String,
+        output_device: Option<String>,
     },
     Speak(String),
     Stop,
+    Shutdown,
+}
+
+struct SynthesisTask {
+    generation: u64,
+    voice: String,
+    output_device: Option<String>,
+    text: String,
+}
+
+enum SynthesisCommand {
+    Generate(SynthesisTask),
+    Shutdown,
+}
+
+enum PlaybackCommand {
+    Play {
+        generation: u64,
+        output_device: Option<String>,
+        path: PathBuf,
+    },
     Shutdown,
 }
 
@@ -37,11 +65,18 @@ impl AppleSpeech {
         Self { sender }
     }
 
-    pub fn configure(&self, enabled: bool, language: &str, voice: &str) {
+    pub fn configure(
+        &self,
+        enabled: bool,
+        language: &str,
+        voice: &str,
+        output_device: Option<&str>,
+    ) {
         let _ = self.sender.send(SpeechCommand::Configure {
             enabled,
             language: language.to_string(),
             voice: normalize_voice_id(voice).to_string(),
+            output_device: output_device.map(str::to_string),
         });
     }
 
@@ -64,78 +99,323 @@ impl Drop for AppleSpeech {
 
 fn speech_worker(receiver: Receiver<SpeechCommand>) {
     let installed = installed_voices();
+    let generation = Arc::new(AtomicU64::new(1));
+    let (synthesis_sender, synthesis_receiver) = mpsc::channel();
+    let (playback_sender, playback_receiver) = mpsc::channel();
+    let synthesis_generation = Arc::clone(&generation);
+    let playback_generation = Arc::clone(&generation);
+    thread::spawn(move || {
+        synthesis_worker(synthesis_receiver, playback_sender, synthesis_generation)
+    });
+    thread::spawn(move || playback_worker(playback_receiver, playback_generation));
+
     let mut enabled = false;
     let mut language = String::from("en");
     let mut voice = String::from("apple-voice-1");
-    let mut queue = VecDeque::new();
-    let mut child: Option<Child> = None;
+    let mut output_device = None;
 
-    loop {
-        match receiver.recv_timeout(Duration::from_millis(40)) {
-            Ok(SpeechCommand::Configure {
+    while let Ok(command) = receiver.recv() {
+        match command {
+            SpeechCommand::Configure {
                 enabled: next_enabled,
                 language: next_language,
                 voice: next_voice,
-            }) => {
-                stop_child(&mut child);
-                queue.clear();
+                output_device: next_output_device,
+            } => {
+                generation.fetch_add(1, Ordering::SeqCst);
                 enabled = next_enabled;
                 language = next_language;
                 voice = next_voice;
+                output_device = next_output_device;
             }
-            Ok(SpeechCommand::Speak(text)) if enabled => queue.push_back(text),
-            Ok(SpeechCommand::Speak(_)) => {}
-            Ok(SpeechCommand::Stop) => {
-                stop_child(&mut child);
-                queue.clear();
-                enabled = false;
-            }
-            Ok(SpeechCommand::Shutdown) => {
-                stop_child(&mut child);
-                break;
-            }
-            Err(RecvTimeoutError::Disconnected) => {
-                stop_child(&mut child);
-                break;
-            }
-            Err(RecvTimeoutError::Timeout) => {}
-        }
-
-        if let Some(process) = child.as_mut() {
-            match process.try_wait() {
-                Ok(Some(_)) => child = None,
-                Err(error) => {
-                    log::error!("Could not read Apple speech process state: {error}");
-                    stop_child(&mut child);
-                }
-                Ok(None) => {}
-            }
-        }
-        if enabled && child.is_none() {
-            if let Some(text) = queue.pop_front() {
+            SpeechCommand::Speak(text) if enabled => {
                 let Some(selected) = select_voice(&installed, &language, &voice) else {
                     log::warn!("Selected Hen Local voice is unavailable: {language} / {voice}");
                     continue;
                 };
-                match spawn_say(&selected, &text) {
-                    Ok(process) => child = Some(process),
-                    Err(error) => log::error!("Could not start Apple speech: {error}"),
+                let _ = synthesis_sender.send(SynthesisCommand::Generate(SynthesisTask {
+                    generation: generation.load(Ordering::SeqCst),
+                    voice: selected,
+                    output_device: output_device.clone(),
+                    text,
+                }));
+            }
+            SpeechCommand::Speak(_) => {}
+            SpeechCommand::Stop => {
+                generation.fetch_add(1, Ordering::SeqCst);
+                enabled = false;
+            }
+            SpeechCommand::Shutdown => {
+                generation.fetch_add(1, Ordering::SeqCst);
+                let _ = synthesis_sender.send(SynthesisCommand::Shutdown);
+                break;
+            }
+        }
+    }
+    generation.fetch_add(1, Ordering::SeqCst);
+    let _ = synthesis_sender.send(SynthesisCommand::Shutdown);
+}
+
+static SPEECH_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+fn synthesis_worker(
+    receiver: Receiver<SynthesisCommand>,
+    playback_sender: Sender<PlaybackCommand>,
+    current_generation: Arc<AtomicU64>,
+) {
+    while let Ok(command) = receiver.recv() {
+        match command {
+            SynthesisCommand::Generate(task) => {
+                if task.generation != current_generation.load(Ordering::SeqCst) {
+                    continue;
+                }
+                match synthesize_wave(&task.voice, &task.text) {
+                    Ok(path) if task.generation == current_generation.load(Ordering::SeqCst) => {
+                        let _ = playback_sender.send(PlaybackCommand::Play {
+                            generation: task.generation,
+                            output_device: task.output_device,
+                            path,
+                        });
+                    }
+                    Ok(path) => {
+                        let _ = fs::remove_file(path);
+                    }
+                    Err(error) => log::error!("Could not synthesize Apple speech: {error}"),
                 }
             }
+            SynthesisCommand::Shutdown => break,
+        }
+    }
+    let _ = playback_sender.send(PlaybackCommand::Shutdown);
+}
+
+fn synthesize_wave(voice: &str, text: &str) -> Result<PathBuf, String> {
+    let sequence = SPEECH_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "hen-local-speech-{}-{sequence}.wav",
+        std::process::id()
+    ));
+    let status = Command::new("/usr/bin/say")
+        .arg("-v")
+        .arg(voice)
+        .arg("-o")
+        .arg(&path)
+        .arg("--file-format=WAVE")
+        .arg("--data-format=LEI16@24000")
+        .arg("--channels=1")
+        .arg(text)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        Ok(path)
+    } else {
+        let _ = fs::remove_file(&path);
+        Err(format!("say exited with {status}"))
+    }
+}
+
+fn playback_worker(receiver: Receiver<PlaybackCommand>, current_generation: Arc<AtomicU64>) {
+    while let Ok(command) = receiver.recv() {
+        match command {
+            PlaybackCommand::Play {
+                generation,
+                output_device,
+                path,
+            } => {
+                if generation == current_generation.load(Ordering::SeqCst) {
+                    if let Err(error) = play_wave(
+                        &path,
+                        output_device.as_deref(),
+                        generation,
+                        Arc::clone(&current_generation),
+                    ) {
+                        log::error!("Could not play Apple speech: {error}");
+                    }
+                }
+                let _ = fs::remove_file(path);
+            }
+            PlaybackCommand::Shutdown => break,
         }
     }
 }
 
-fn stop_child(child: &mut Option<Child>) {
-    if let Some(mut process) = child.take() {
-        let _ = process.kill();
-        let _ = process.wait();
+fn play_wave(
+    path: &PathBuf,
+    selected_device: Option<&str>,
+    generation: u64,
+    current_generation: Arc<AtomicU64>,
+) -> Result<(), String> {
+    let mut reader = hound::WavReader::open(path).map_err(|error| error.to_string())?;
+    let specification = reader.spec();
+    let source_channels = usize::from(specification.channels.max(1));
+    let samples: Vec<f32> = reader
+        .samples::<i16>()
+        .map(|sample| sample.map(|value| f32::from(value) / f32::from(i16::MAX)))
+        .collect::<Result<_, _>>()
+        .map_err(|error| error.to_string())?;
+
+    let host = cpal::default_host();
+    let device = selected_device
+        .and_then(|selected| {
+            host.output_devices().ok()?.find(|device| {
+                device
+                    .name()
+                    .is_ok_and(|device_name| device_name == selected)
+            })
+        })
+        .or_else(|| host.default_output_device())
+        .ok_or_else(|| "No audio output device is available".to_string())?;
+    if let Some(selected) = selected_device {
+        if device.name().ok().as_deref() != Some(selected) {
+            log::warn!("Speech output device disconnected; using the system default: {selected}");
+        }
     }
+
+    let supported = device
+        .default_output_config()
+        .map_err(|error| error.to_string())?;
+    let config = supported.config();
+    let output = Arc::new(resample_for_output(
+        &samples,
+        source_channels,
+        specification.sample_rate,
+        usize::from(config.channels),
+        config.sample_rate.0,
+    ));
+    let finished = Arc::new(AtomicBool::new(false));
+    let error_callback = |error| log::error!("Apple speech audio stream error: {error}");
+
+    let stream = match supported.sample_format() {
+        cpal::SampleFormat::F32 => {
+            let output = Arc::clone(&output);
+            let finished = Arc::clone(&finished);
+            let active_generation = Arc::clone(&current_generation);
+            let mut cursor = 0usize;
+            let mut draining = false;
+            device.build_output_stream(
+                &config,
+                move |buffer: &mut [f32], _| {
+                    if draining || generation != active_generation.load(Ordering::Relaxed) {
+                        buffer.fill(0.0);
+                        finished.store(true, Ordering::Release);
+                        return;
+                    }
+                    for sample in buffer.iter_mut() {
+                        *sample = output.get(cursor).copied().unwrap_or(0.0);
+                        cursor += usize::from(cursor < output.len());
+                    }
+                    draining = cursor >= output.len();
+                },
+                error_callback,
+                None,
+            )
+        }
+        cpal::SampleFormat::I16 => {
+            let output = Arc::clone(&output);
+            let finished = Arc::clone(&finished);
+            let active_generation = Arc::clone(&current_generation);
+            let mut cursor = 0usize;
+            let mut draining = false;
+            device.build_output_stream(
+                &config,
+                move |buffer: &mut [i16], _| {
+                    if draining || generation != active_generation.load(Ordering::Relaxed) {
+                        buffer.fill(0);
+                        finished.store(true, Ordering::Release);
+                        return;
+                    }
+                    for sample in buffer.iter_mut() {
+                        let value = output.get(cursor).copied().unwrap_or(0.0);
+                        *sample = (value.clamp(-1.0, 1.0) * f32::from(i16::MAX)) as i16;
+                        cursor += usize::from(cursor < output.len());
+                    }
+                    draining = cursor >= output.len();
+                },
+                error_callback,
+                None,
+            )
+        }
+        cpal::SampleFormat::U16 => {
+            let output = Arc::clone(&output);
+            let finished = Arc::clone(&finished);
+            let active_generation = Arc::clone(&current_generation);
+            let mut cursor = 0usize;
+            let mut draining = false;
+            device.build_output_stream(
+                &config,
+                move |buffer: &mut [u16], _| {
+                    if draining || generation != active_generation.load(Ordering::Relaxed) {
+                        buffer.fill(u16::MAX / 2);
+                        finished.store(true, Ordering::Release);
+                        return;
+                    }
+                    for sample in buffer.iter_mut() {
+                        let value = output.get(cursor).copied().unwrap_or(0.0);
+                        *sample =
+                            ((value.clamp(-1.0, 1.0) * 0.5 + 0.5) * f32::from(u16::MAX)) as u16;
+                        cursor += usize::from(cursor < output.len());
+                    }
+                    draining = cursor >= output.len();
+                },
+                error_callback,
+                None,
+            )
+        }
+        format => return Err(format!("Unsupported output sample format: {format:?}")),
+    }
+    .map_err(|error| error.to_string())?;
+
+    stream.play().map_err(|error| error.to_string())?;
+    while !finished.load(Ordering::Acquire)
+        && generation == current_generation.load(Ordering::SeqCst)
+    {
+        thread::sleep(Duration::from_millis(5));
+    }
+    Ok(())
 }
 
-fn spawn_say(voice: &str, text: &str) -> Result<Child, std::io::Error> {
+fn resample_for_output(
+    samples: &[f32],
+    source_channels: usize,
+    source_rate: u32,
+    output_channels: usize,
+    output_rate: u32,
+) -> Vec<f32> {
+    if samples.is_empty() || source_rate == 0 || output_channels == 0 {
+        return Vec::new();
+    }
+    let mono: Vec<f32> = samples
+        .chunks(source_channels)
+        .map(|frame| frame.iter().sum::<f32>() / frame.len() as f32)
+        .collect();
+    let output_frames =
+        ((mono.len() as u64 * u64::from(output_rate)) / u64::from(source_rate)) as usize;
+    let ratio = f64::from(source_rate) / f64::from(output_rate);
+    let mut output = Vec::with_capacity(output_frames * output_channels);
+    for frame in 0..output_frames {
+        let position = frame as f64 * ratio;
+        let left = position.floor() as usize;
+        let right = (left + 1).min(mono.len() - 1);
+        let fraction = (position - left as f64) as f32;
+        let value = mono[left] + (mono[right] - mono[left]) * fraction;
+        output.extend(std::iter::repeat_n(value, output_channels));
+    }
+    output
+}
+
+fn spawn_say(
+    voice: &str,
+    output_device: Option<&str>,
+    text: &str,
+) -> Result<Child, std::io::Error> {
     let mut command = Command::new("/usr/bin/say");
     command.arg("-v").arg(voice);
+    if let Some(device_id) = available_output_device_id(output_device) {
+        command.arg("-a").arg(device_id);
+    }
     command
         .arg(text)
         .stdin(Stdio::null())
@@ -144,11 +424,16 @@ fn spawn_say(voice: &str, text: &str) -> Result<Child, std::io::Error> {
         .spawn()
 }
 
-pub fn preview(voice: &str, language: &str, text: &str) -> Result<Child, String> {
+pub fn preview(
+    voice: &str,
+    language: &str,
+    output_device: Option<&str>,
+    text: &str,
+) -> Result<Child, String> {
     let installed = installed_voices();
     let selected = select_voice(&installed, language, normalize_voice_id(voice))
         .ok_or_else(|| format!("Selected Hen Local voice is unavailable for {language}"))?;
-    spawn_say(&selected, text)
+    spawn_say(&selected, output_device, text)
         .map_err(|error| format!("Could not play Apple voice preview: {error}"))
 }
 
@@ -159,8 +444,46 @@ pub fn preview_named(name: &str, locale: &str) -> Result<Child, String> {
         .find(|voice| voice.name == name && voice.locale == locale)
         .ok_or_else(|| format!("Apple system voice is unavailable: {name} ({locale})"))?;
     let sample = audition_text(&voice.locale);
-    spawn_say(&voice.name, sample)
+    spawn_say(&voice.name, None, sample)
         .map_err(|error| format!("Could not play Apple voice preview: {error}"))
+}
+
+fn available_output_device_id(selected: Option<&str>) -> Option<String> {
+    let selected = selected?.trim();
+    if selected.is_empty() {
+        return None;
+    }
+    let device_id = output_devices()
+        .into_iter()
+        .find_map(|(id, name)| (name == selected).then_some(id));
+    if device_id.is_none() {
+        log::warn!("Apple speech output device is unavailable; using system default: {selected}");
+    }
+    device_id
+}
+
+pub fn output_device_names() -> Vec<String> {
+    let mut devices: Vec<String> = output_devices().into_iter().map(|(_, name)| name).collect();
+    devices.sort();
+    devices.dedup();
+    devices
+}
+
+fn output_devices() -> Vec<(String, String)> {
+    let Ok(output) = Command::new("/usr/bin/say").arg("-a").arg("?").output() else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(parse_output_device_line)
+        .collect()
+}
+
+fn parse_output_device_line(line: &str) -> Option<(String, String)> {
+    let (id, name) = line.trim().split_once(char::is_whitespace)?;
+    let name = name.trim();
+    (!id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()) && !name.is_empty())
+        .then(|| (id.to_string(), name.to_string()))
 }
 
 fn audition_text(locale: &str) -> &'static str {
@@ -283,6 +606,22 @@ mod tests {
             parse_voice_line("Majed ar_001 # hello"),
             Some(("Majed".into(), "ar_001".into()))
         );
+    }
+
+    #[test]
+    fn parses_say_output_devices() {
+        assert_eq!(
+            parse_output_device_line("  94 MacBook Pro Speakers"),
+            Some(("94".into(), "MacBook Pro Speakers".into()))
+        );
+        assert_eq!(parse_output_device_line("not a device"), None);
+    }
+
+    #[test]
+    fn resamples_mono_audio_and_expands_output_channels() {
+        let output = resample_for_output(&[0.0, 1.0], 1, 2, 2, 4);
+        assert_eq!(output.len(), 8);
+        assert_eq!(&output[..4], &[0.0, 0.0, 0.5, 0.5]);
     }
 
     #[test]

@@ -19,6 +19,7 @@ export interface TranslationSettings {
   fontSizePreset: string;
   anchorPositionPreset: string;
   spokenTranslationEnabled: boolean;
+  spokenTranslationOutputDevice: string | null;
   spokenTranslationVoice: string | null;
   autoSaveTranscript: boolean;
   periodicSaveTranscript: boolean;
@@ -29,6 +30,7 @@ export interface TranslationSettings {
 export interface SettingsPayload {
   settings: TranslationSettings;
   inputDevices: string[];
+  outputDevices: string[];
   subtitlePreviewVisible: boolean;
   running: boolean;
   runtimeStatus: string;
@@ -133,11 +135,12 @@ export const previewSettings: SettingsPayload = {
     targetLanguage: 'en',
     inputDevice: '__system_audio__',
     overlayFullscreen: true,
-    subtitleSplit: true,
+    subtitleSplit: false,
     overlayOpacity: 1,
     fontSizePreset: '24',
     anchorPositionPreset: '50',
     spokenTranslationEnabled: false,
+    spokenTranslationOutputDevice: null,
     spokenTranslationVoice: 'apple-voice-1',
     autoSaveTranscript: false,
     periodicSaveTranscript: false,
@@ -145,6 +148,7 @@ export const previewSettings: SettingsPayload = {
     transcriptSaveDir: null
   },
   inputDevices: ['__system_audio__', '__default_microphone__', 'MacBook Pro Microphone'],
+  outputDevices: ['MacBook Pro Speakers'],
   subtitlePreviewVisible: true,
   running: false,
   runtimeStatus: 'idle',
@@ -156,7 +160,7 @@ export const previewOverlay: OverlayState = {
   status: 'idle',
   sourceLanguage: 'zh',
   targetLanguage: 'en',
-  subtitleSplit: true,
+  subtitleSplit: false,
   fontSize: 24,
   anchorPosition: 50,
   accentTheme: 'neon-blue',
@@ -407,6 +411,10 @@ export async function stopSpokenVoicePreview(): Promise<void> {
 
 export async function listAppleVoices(): Promise<AppleSystemVoice[]> {
   return isTauri() ? invoke<AppleSystemVoice[]>('list_apple_voices') : [];
+}
+
+export async function listOutputDevices(): Promise<string[]> {
+  return isTauri() ? invoke<string[]>('list_output_devices') : previewSettings.outputDevices;
 }
 
 export async function previewAppleVoice(name: string, locale: string): Promise<void> {

@@ -19,6 +19,7 @@ pub struct AppPreferences {
     pub translation_font_size_preset: String,
     pub translation_anchor_position_preset: String,
     pub experimental_spoken_translation_enabled: bool,
+    pub experimental_spoken_translation_output_device: Option<String>,
     pub experimental_spoken_translation_voice: Option<String>,
 }
 
@@ -35,11 +36,12 @@ impl Default for AppPreferences {
             translation_target_language: "en".into(),
             translation_input_device: "__system_audio__".into(),
             translation_overlay_fullscreen: true,
-            translation_subtitle_split: true,
+            translation_subtitle_split: false,
             translation_overlay_opacity: 1.0,
             translation_font_size_preset: "24".into(),
             translation_anchor_position_preset: "50".into(),
             experimental_spoken_translation_enabled: false,
+            experimental_spoken_translation_output_device: None,
             experimental_spoken_translation_voice: Some("apple-voice-1".into()),
         }
     }
@@ -159,5 +161,12 @@ mod tests {
     #[test]
     fn spoken_translation_is_off_by_default() {
         assert!(!AppPreferences::default().experimental_spoken_translation_enabled);
+    }
+
+    #[test]
+    fn fullscreen_stacked_subtitles_are_the_default() {
+        let preferences = AppPreferences::default();
+        assert!(preferences.translation_overlay_fullscreen);
+        assert!(!preferences.translation_subtitle_split);
     }
 }

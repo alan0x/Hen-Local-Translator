@@ -39,6 +39,7 @@ pub struct TranslationSettings {
     font_size_preset: String,
     anchor_position_preset: String,
     spoken_translation_enabled: bool,
+    spoken_translation_output_device: Option<String>,
     spoken_translation_voice: Option<String>,
     auto_save_transcript: bool,
     periodic_save_transcript: bool,
@@ -60,6 +61,9 @@ impl From<&AppPreferences> for TranslationSettings {
             font_size_preset: preferences.translation_font_size_preset.clone(),
             anchor_position_preset: preferences.translation_anchor_position_preset.clone(),
             spoken_translation_enabled: preferences.experimental_spoken_translation_enabled,
+            spoken_translation_output_device: preferences
+                .experimental_spoken_translation_output_device
+                .clone(),
             spoken_translation_voice: preferences.experimental_spoken_translation_voice.clone(),
             auto_save_transcript: preferences.translation_auto_save_transcript,
             periodic_save_transcript: preferences.translation_periodic_save_transcript,
@@ -85,6 +89,8 @@ impl TranslationSettings {
         preferences.translation_font_size_preset = self.font_size_preset.clone();
         preferences.translation_anchor_position_preset = self.anchor_position_preset.clone();
         preferences.experimental_spoken_translation_enabled = self.spoken_translation_enabled;
+        preferences.experimental_spoken_translation_output_device =
+            self.spoken_translation_output_device.clone();
         preferences.experimental_spoken_translation_voice = self.spoken_translation_voice.clone();
         preferences.translation_auto_save_transcript = self.auto_save_transcript;
         preferences.translation_periodic_save_transcript = self.periodic_save_transcript;
@@ -98,6 +104,7 @@ impl TranslationSettings {
 struct SettingsPayload {
     settings: TranslationSettings,
     input_devices: Vec<String>,
+    output_devices: Vec<String>,
     subtitle_preview_visible: bool,
     running: bool,
     runtime_status: String,
@@ -541,9 +548,19 @@ fn resolve_model_downloader() -> Option<PathBuf> {
 fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
     let preferences = state.preferences.lock().clone();
     let runtime_state = state.poll_runtime_events();
+    let output_devices = apple_speech::output_device_names();
+    let mut settings = TranslationSettings::from(&preferences);
+    if settings
+        .spoken_translation_output_device
+        .as_ref()
+        .is_some_and(|selected| !output_devices.contains(selected))
+    {
+        settings.spoken_translation_output_device = None;
+    }
     SettingsPayload {
-        settings: TranslationSettings::from(&preferences),
+        settings,
         input_devices: input_devices(),
+        output_devices,
         subtitle_preview_visible: *state.subtitle_preview_visible.lock(),
         running: runtime_state.running,
         runtime_status: runtime_state.status,
@@ -621,7 +638,9 @@ fn update_settings(
         let speech_changed = preferences.experimental_spoken_translation_enabled
             != settings.spoken_translation_enabled
             || preferences.experimental_spoken_translation_voice
-                != settings.spoken_translation_voice;
+                != settings.spoken_translation_voice
+            || preferences.experimental_spoken_translation_output_device
+                != settings.spoken_translation_output_device;
         settings.apply_to(&mut preferences);
         preferences::save(&preferences)?;
         (overlay_changed, speech_changed)
@@ -642,6 +661,7 @@ fn update_settings(
                 .spoken_translation_voice
                 .as_deref()
                 .unwrap_or("apple-voice-1"),
+            settings.spoken_translation_output_device.as_deref(),
         );
     }
     apply_native_identity(&app, &settings)?;
@@ -693,6 +713,7 @@ fn start_translation(
             .spoken_translation_voice
             .as_deref()
             .unwrap_or("apple-voice-1"),
+        settings.spoken_translation_output_device.as_deref(),
     );
     state.runtime.start(dataflow)?;
     if let Err(error) = state.usage.start() {
@@ -838,7 +859,12 @@ fn preview_spoken_voice(
         "fr" => "Bienvenue dans Hen Local, voici un aperçu de la voix système Apple.",
         _ => "Welcome to Hen Local Live Translator. This is an Apple system voice preview.",
     };
-    let child = apple_speech::preview(&voice, &language, sample)?;
+    let output_device = state
+        .preferences
+        .lock()
+        .experimental_spoken_translation_output_device
+        .clone();
+    let child = apple_speech::preview(&voice, &language, output_device.as_deref(), sample)?;
 
     *state.voice_preview_process.lock() = Some(child);
     Ok(())
@@ -852,6 +878,11 @@ fn stop_spoken_voice_preview(state: State<'_, AppState>) {
 #[tauri::command]
 fn list_apple_voices() -> Vec<apple_speech::SystemVoice> {
     apple_speech::available_voices()
+}
+
+#[tauri::command]
+fn list_output_devices() -> Vec<String> {
+    apple_speech::output_device_names()
 }
 
 #[tauri::command]
@@ -1138,6 +1169,7 @@ pub fn run(args: Args) {
             preview_spoken_voice,
             stop_spoken_voice_preview,
             list_apple_voices,
+            list_output_devices,
             preview_apple_voice,
             open_voice_lab
         ])
@@ -1171,7 +1203,10 @@ mod tests {
 
     #[test]
     fn settings_round_trip_preserves_translation_preferences() {
-        let original = AppPreferences::default();
+        let original = AppPreferences {
+            experimental_spoken_translation_output_device: Some("Studio Display Speakers".into()),
+            ..AppPreferences::default()
+        };
         let settings = TranslationSettings::from(&original);
         let mut updated = AppPreferences::default();
         settings.apply_to(&mut updated);
@@ -1188,5 +1223,9 @@ mod tests {
             updated.translation_input_device
         );
         assert_eq!(original.accent_theme, updated.accent_theme);
+        assert_eq!(
+            original.experimental_spoken_translation_output_device,
+            updated.experimental_spoken_translation_output_device
+        );
     }
 }

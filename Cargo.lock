@@ -2765,6 +2765,7 @@ dependencies = [
  "dirs 5.0.1",
  "ed25519-dalek",
  "env_logger",
+ "hound",
  "keyring",
  "log",
  "moxin-dora-bridge",
