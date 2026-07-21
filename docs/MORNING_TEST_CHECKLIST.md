@@ -42,14 +42,16 @@ if anything is wrong.
 1. For an English target, test exactly **Siri Voice 1–5** downloaded from
    macOS Live Speech settings. For a Chinese target, test **Apple 音色 1–5** and
    use the Voice Lab to shortlist better Chinese voices.
-2. Confirm every preview speaks the new Hen Local sample, not “这是一个充满
+2. Confirm the first Chinese choice is **Yue (Premium)** and compare its startup
+   speed and naturalness with the other Chinese candidates.
+3. Confirm every preview speaks the new Hen Local sample, not “这是一个充满
    希望的时代” and not “欢迎来到 Moxie Voice”.
-3. Start translation with speech enabled and confirm every completed translation
+4. Start translation with speech enabled and confirm every completed translation
    is spoken once, in order.
-4. Stop while a sentence is playing and confirm speech stops without leaving a
+5. Stop while a sentence is playing and confirm speech stops without leaving a
    `say` or Qwen TTS process behind.
-5. Confirm output follows the Mac system-default device.
-6. Confirm the app never asks to download a speech model and no Qwen TTS node
+6. Confirm output follows the Mac system-default device.
+7. Confirm the app never asks to download a speech model and no Qwen TTS node
    appears in the running Dora dataflow.
 
 

@@ -14,6 +14,7 @@ h1 { margin: 0; font-size: clamp(36px, 5vw, 66px); line-height: .96; letter-spac
 .instructions { display: flex; flex-wrap: wrap; gap: 12px 28px; padding: 18px 0; border-bottom: 1px solid #b9bdc0; font-size: 13px; }
 .instructions b { color: #0003fe; }
 .instructions span { color: #565a5e; }
+.instructions small { flex-basis: 100%; color: #777b7f; line-height: 1.45; }
 nav { position: sticky; top: 0; z-index: 5; display: flex; gap: 0; padding: 16px 0; background: #f4f4f0; }
 nav button { min-height: 42px; border: 1px solid #101112; border-right: 0; padding: 0 16px; background: white; font-weight: 750; }
 nav button.active { background: #0003fe; color: white; }
@@ -31,6 +32,7 @@ article.favorite { border: 2px solid #0003fe; padding: 17px; box-shadow: 5px 5px
 h2 { margin: 0; font-size: 19px; line-height: 1.2; }
 .voice-info span { display: inline-block; margin-top: 6px; color: #0003fe; font-family: ui-monospace, monospace; font-size: 11px; font-weight: 800; }
 .siri-badge { display: inline-block; margin: 6px 0 0 7px; padding: 3px 6px; background: #101112; color: white; font-size: 9px; letter-spacing: .08em; vertical-align: 1px; }
+.yue-badge { display: inline-block; margin: 6px 0 0 7px; padding: 3px 6px; background: #51f91b; color: #101112; font-size: 9px; letter-spacing: .05em; vertical-align: 1px; }
 article p { flex: 1; margin: 14px 0; color: #666b70; font-size: 12px; line-height: 1.45; }
 .play { width: 100%; height: 39px; border: 1px solid #101112; background: white; font-weight: 800; }
 .play:hover, .play.playing { background: #0003fe; color: white; }

@@ -394,6 +394,11 @@ Goal: validate the single subscription before introducing more pricing.
   system voice installed on the current Mac. Mapped English choices 1–5 to the
   downloaded Siri Live Speech Voice 1–5; Chinese remains on installed Chinese
   voices until the product shortlist is selected.
+- 2026-07-21: Promoted the installed `Yue (Premium)` voice to the first Chinese
+  speech candidate after confirming it is available through Apple's public
+  speech interface and has low runtime memory overhead. Downloaded Chinese Siri
+  Live Speech voices are absent from the current public speech APIs and are not
+  wired through private Apple interfaces.
 - 2026-07-21: Added launch drafts for privacy, terms, cancellation/refunds,
   support/license recovery, and release recovery. Verified all three downloaded
   MLX model cards declare Apache-2.0; preview-recording provenance remains a

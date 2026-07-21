@@ -189,7 +189,7 @@ fn preferred_voice(language: &str, index: usize) -> &'static str {
     // them on current macOS releases.
     const EN: [&str; 5] = ["Voice 1", "Voice 2", "Voice 3", "Voice 4", "Voice 5"];
     const ZH: [&str; 5] = [
-        "Tingting",
+        "Yue (Premium)",
         "Eddy (Chinese (China mainland))",
         "Flo (Chinese (China mainland))",
         "Reed (Chinese (China mainland))",
@@ -326,5 +326,10 @@ mod tests {
     fn maps_english_choices_to_siri_live_speech_voices() {
         assert_eq!(preferred_voice("en", 0), "Voice 1");
         assert_eq!(preferred_voice("en", 4), "Voice 5");
+    }
+
+    #[test]
+    fn maps_first_chinese_choice_to_yue_premium() {
+        assert_eq!(preferred_voice("zh", 0), "Yue (Premium)");
     }
 }

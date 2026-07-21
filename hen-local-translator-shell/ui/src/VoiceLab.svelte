@@ -32,11 +32,15 @@
   const languageOf = (locale: string) => locale.split('_')[0].toLowerCase();
   const isPrimary = (locale: string) => ['zh', 'en', 'ja', 'fr'].includes(languageOf(locale));
   const isSiriLiveSpeechVoice = (voice: AppleSystemVoice) => voice.locale === 'en_US' && /^Voice [1-5]$/.test(voice.name);
+  const isYuePremium = (voice: AppleSystemVoice) => voice.locale === 'zh_CN' && voice.name === 'Yue (Premium)';
 
   function voiceSort(left: AppleSystemVoice, right: AppleSystemVoice): number {
     const leftSiri = isSiriLiveSpeechVoice(left);
     const rightSiri = isSiriLiveSpeechVoice(right);
     if (leftSiri !== rightSiri) return leftSiri ? -1 : 1;
+    const leftYue = isYuePremium(left);
+    const rightYue = isYuePremium(right);
+    if (leftYue !== rightYue) return leftYue ? -1 : 1;
     return left.locale.localeCompare(right.locale) || left.name.localeCompare(right.name, undefined, { numeric: true });
   }
 
@@ -134,6 +138,7 @@
   <section class="instructions">
     <b>建议听这三点</b>
     <span>自然度：不像机器人</span><span>清晰度：长句仍容易听懂</span><span>耐听度：连续听十分钟不刺耳</span>
+    <small>注：中文 Siri Live Speech 音色目前没有通过 Apple 的应用接口开放，因此这里只显示软件可以真正调用的音色。</small>
   </section>
 
   <nav>
@@ -164,6 +169,7 @@
             <h2>{voice.name}</h2>
             <span>{voice.locale}</span>
             {#if isSiriLiveSpeechVoice(voice)}<b class="siri-badge">SIRI · LIVE SPEECH</b>{/if}
+            {#if isYuePremium(voice)}<b class="yue-badge">PREMIUM · 中文候选</b>{/if}
           </div>
           <p>{voice.sample || 'Apple system voice'}</p>
           <button class="play" class:playing={playing === keyFor(voice)} on:click={() => togglePreview(voice)}>

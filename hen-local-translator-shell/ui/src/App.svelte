@@ -121,6 +121,7 @@
 
   function spokenVoiceName(voice: (typeof spokenVoices)[number]): string {
     if (settings?.targetLanguage === 'en') return voice.siri;
+    if (settings?.targetLanguage === 'zh' && voice.id === 'apple-voice-1') return 'Yue (Premium)';
     return isEnglish() ? voice.en : voice.zh;
   }
 
