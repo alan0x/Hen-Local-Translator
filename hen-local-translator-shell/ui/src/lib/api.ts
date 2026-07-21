@@ -31,6 +31,7 @@ export interface SettingsPayload {
   settings: TranslationSettings;
   inputDevices: string[];
   outputDevices: string[];
+  installedAppleVoices: string[];
   subtitlePreviewVisible: boolean;
   running: boolean;
   runtimeStatus: string;
@@ -149,6 +150,7 @@ export const previewSettings: SettingsPayload = {
   },
   inputDevices: ['__system_audio__', '__default_microphone__', 'MacBook Pro Microphone'],
   outputDevices: ['MacBook Pro Speakers'],
+  installedAppleVoices: ['Yue (Premium)', 'Tingting', 'Voice 1', 'Voice 2', 'Voice 3', 'Voice 4', 'Voice 5'],
   subtitlePreviewVisible: true,
   running: false,
   runtimeStatus: 'idle',
@@ -411,6 +413,10 @@ export async function stopSpokenVoicePreview(): Promise<void> {
 
 export async function listAppleVoices(): Promise<AppleSystemVoice[]> {
   return isTauri() ? invoke<AppleSystemVoice[]>('list_apple_voices') : [];
+}
+
+export async function openAppleVoiceSettings(): Promise<void> {
+  if (isTauri()) await invoke('open_apple_voice_settings');
 }
 
 export async function listOutputDevices(): Promise<string[]> {

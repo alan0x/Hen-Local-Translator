@@ -215,6 +215,7 @@ select:disabled, button:disabled { cursor: not-allowed; }
 .model-row button { min-width: 84px; height: 32px; border: 1px solid var(--ink); background: #fff; font-size: 10px; font-weight: 760; }
 .model-row button:not(:disabled):hover { background: var(--ink); color: #fff; }
 .model-row button:disabled { color: var(--muted); }
+.model-row > .model-row-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .model-progress { height: 5px; margin: 12px 18px 0; background: #e5e6e8; overflow: hidden; }
 .model-progress span { display: block; height: 100%; background: var(--accent); transition: width 180ms linear; }
 .model-detail { margin: 7px 18px 13px; color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

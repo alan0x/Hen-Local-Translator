@@ -556,6 +556,36 @@ pub fn available_voices() -> Vec<SystemVoice> {
         .collect()
 }
 
+pub fn available_voice_names() -> Vec<String> {
+    available_voices()
+        .into_iter()
+        .map(|voice| voice.name)
+        .collect()
+}
+
+pub fn required_voice_name(language: &str) -> Option<&'static str> {
+    match language {
+        "zh" => Some("Yue (Premium)"),
+        "en" => Some("Voice 4"),
+        _ => None,
+    }
+}
+
+pub fn ensure_required_voice(language: &str) -> Result<(), String> {
+    let required = required_voice_name(language)
+        .ok_or_else(|| format!("Spoken translation is not available for {language}"))?;
+    if available_voice_names()
+        .iter()
+        .any(|voice| voice == required)
+    {
+        Ok(())
+    } else {
+        Err(format!(
+            "Required Apple voice is not installed: {required}. Download it in macOS Accessibility settings before enabling spoken translation."
+        ))
+    }
+}
+
 #[cfg(test)]
 fn parse_voice_line(line: &str) -> Option<(String, String)> {
     parse_system_voice_line(line).map(|voice| (voice.name, voice.locale))
@@ -635,6 +665,13 @@ mod tests {
         assert_eq!(preferred_voice("zh", 0), Some("Yue (Premium)"));
         assert_eq!(preferred_voice("zh", 1), Some("Tingting"));
         assert_eq!(preferred_voice("zh", 2), None);
+    }
+
+    #[test]
+    fn requires_yue_for_chinese_and_voice_four_for_english() {
+        assert_eq!(required_voice_name("zh"), Some("Yue (Premium)"));
+        assert_eq!(required_voice_name("en"), Some("Voice 4"));
+        assert_eq!(required_voice_name("ja"), None);
     }
 
     #[test]

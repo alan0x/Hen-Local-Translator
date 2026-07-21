@@ -18,7 +18,9 @@
     downloadUpdate,
     installDownloadedUpdate,
     listenRuntime,
+    listAppleVoices,
     listOutputDevices,
+    openAppleVoiceSettings,
     openTranscriptHistory,
     openVoiceLab,
     previewSpokenVoice,
@@ -86,6 +88,7 @@
   let accountError = '';
   let accountRefreshTimer: number | null = null;
   let refreshingOutputDevices = false;
+  let refreshingAppleVoices = false;
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
@@ -115,24 +118,46 @@
     return value;
   }
 
+  function requiredVoiceForTarget(target: string): { id: string; name: string } | null {
+    if (target === 'zh') return { id: 'apple-voice-1', name: 'Yue (Premium)' };
+    if (target === 'en') return { id: 'apple-voice-4', name: 'Voice 4' };
+    return null;
+  }
+
+  function isAppleVoiceInstalled(name: string): boolean {
+    return payload?.installedAppleVoices.includes(name) ?? false;
+  }
+
+  function requiredVoiceReady(target: string): boolean {
+    const required = requiredVoiceForTarget(target);
+    return required !== null && isAppleVoiceInstalled(required.name);
+  }
+
   function voicesForTarget(target: string): ReadonlyArray<{ id: string; name: string }> {
-    if (target === 'zh') return chineseSpokenVoices;
-    if (target === 'en') return englishSpokenVoices;
-    return [];
+    const candidates = target === 'zh' ? chineseSpokenVoices : target === 'en' ? englishSpokenVoices : [];
+    return candidates.filter((voice) => isAppleVoiceInstalled(voice.name));
   }
 
   function syncVoiceToTarget(): boolean {
     if (!settings) return false;
     const available = voicesForTarget(settings.targetLanguage);
+    const required = requiredVoiceForTarget(settings.targetLanguage);
+    let changed = false;
+    if (!requiredVoiceReady(settings.targetLanguage) && settings.spokenTranslationEnabled) {
+      settings.spokenTranslationEnabled = false;
+      changed = true;
+    }
     if (available.length === 0) {
-      const changed = settings.spokenTranslationEnabled || settings.spokenTranslationVoice !== null;
+      changed = settings.spokenTranslationEnabled || settings.spokenTranslationVoice !== null || changed;
       settings.spokenTranslationEnabled = false;
       settings.spokenTranslationVoice = null;
       return changed;
     }
     const current = settings.spokenTranslationVoice;
-    if (current && available.some((voice) => voice.id === current)) return false;
-    settings.spokenTranslationVoice = available[0]?.id ?? 'apple-voice-1';
+    if (current && available.some((voice) => voice.id === current)) return changed;
+    settings.spokenTranslationVoice = required && available.some((voice) => voice.id === required.id)
+      ? required.id
+      : available[0]?.id ?? null;
     return true;
   }
 
@@ -167,6 +192,33 @@
       errorMessage = String(error);
     } finally {
       refreshingOutputDevices = false;
+    }
+  }
+
+  async function refreshAppleVoiceStatus(): Promise<void> {
+    if (!payload || !settings || refreshingAppleVoices) return;
+    refreshingAppleVoices = true;
+    errorMessage = '';
+    try {
+      const voices = await listAppleVoices();
+      payload.installedAppleVoices = voices.map((voice) => voice.name);
+      payload = { ...payload };
+      if (syncVoiceToTarget()) {
+        settings = { ...settings };
+        await persist();
+      }
+    } catch (error) {
+      errorMessage = String(error);
+    } finally {
+      refreshingAppleVoices = false;
+    }
+  }
+
+  async function openAppleVoiceDownloads(): Promise<void> {
+    try {
+      await openAppleVoiceSettings();
+    } catch (error) {
+      errorMessage = String(error);
     }
   }
 
@@ -232,10 +284,13 @@
 
   async function setSpokenTranslation(enabled: boolean): Promise<void> {
     if (!settings) return;
-    if (enabled && voicesForTarget(settings.targetLanguage).length === 0) {
+    if (enabled && !requiredVoiceReady(settings.targetLanguage)) {
+      const required = requiredVoiceForTarget(settings.targetLanguage);
       settings.spokenTranslationEnabled = false;
       settings = { ...settings };
-      errorMessage = tr('当前目标语言还没有选定播报音色。', 'No approved voice is available for the target language.');
+      errorMessage = required
+        ? tr(`请先在 Mac 系统设置中下载 ${required.name} 音色。`, `Download ${required.name} in macOS System Settings first.`)
+        : tr('当前目标语言暂不支持译文播报。', 'Spoken translation is not supported for this target language.');
       return;
     }
     if (!enabled) await stopVoicePreview();
@@ -684,7 +739,7 @@
             <span class="control-label">{tr('播报开关', 'SPEECH OUTPUT')}</span>
             <div class="segmented two">
               <button class:active={!settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(false)}>{tr('关', 'OFF')}</button>
-              <button disabled={voicesForTarget(settings.targetLanguage).length === 0} class:active={settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(true)}>{tr('开', 'ON')}</button>
+              <button disabled={requiredVoiceForTarget(settings.targetLanguage) === null} class:active={settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(true)}>{tr('开', 'ON')}</button>
             </div>
           </div>
 
@@ -818,8 +873,19 @@
               <button disabled={modelStatus.coreReady || modelStatus.downloading} on:click={() => downloadModels('core')}>{modelStatus.coreReady ? tr('已安装', 'INSTALLED') : tr('下载', 'DOWNLOAD')}</button>
             </div>
             <div class="model-row">
-              <div><strong>{tr('译文播报', 'SPOKEN TRANSLATION')}</strong><small>{tr('使用 Mac 内置 Apple 音色 · 无需下载模型', 'USES BUILT-IN APPLE VOICES · NO MODEL DOWNLOAD')}</small></div>
-              <button disabled>{tr('系统内置', 'BUILT IN')}</button>
+              <div>
+                <strong>{tr('译文播报必备音色', 'REQUIRED APPLE VOICES')}</strong>
+                <small>
+                  Yue (Premium) {isAppleVoiceInstalled('Yue (Premium)') ? '✓' : tr('· 未安装', '· MISSING')}
+                  · Voice 4 {isAppleVoiceInstalled('Voice 4') ? '✓' : tr('· 未安装', '· MISSING')}
+                </small>
+              </div>
+              <div class="model-row-actions">
+                {#if !isAppleVoiceInstalled('Yue (Premium)') || !isAppleVoiceInstalled('Voice 4')}
+                  <button on:click={openAppleVoiceDownloads}>{tr('下载音色', 'GET VOICES')}</button>
+                {/if}
+                <button disabled={refreshingAppleVoices} on:click={refreshAppleVoiceStatus}>{refreshingAppleVoices ? tr('检测中…', 'CHECKING…') : tr('重新检测', 'RECHECK')}</button>
+              </div>
             </div>
             {#if modelStatus.downloading}
               <div class="model-progress"><span style={`width:${Math.round(modelStatus.progress * 100)}%`}></span></div>

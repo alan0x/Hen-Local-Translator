@@ -105,6 +105,7 @@ struct SettingsPayload {
     settings: TranslationSettings,
     input_devices: Vec<String>,
     output_devices: Vec<String>,
+    installed_apple_voices: Vec<String>,
     subtitle_preview_visible: bool,
     running: bool,
     runtime_status: String,
@@ -561,6 +562,7 @@ fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
         settings,
         input_devices: input_devices(),
         output_devices,
+        installed_apple_voices: apple_speech::available_voice_names(),
         subtitle_preview_visible: *state.subtitle_preview_visible.lock(),
         running: runtime_state.running,
         runtime_status: runtime_state.status,
@@ -631,6 +633,9 @@ fn update_settings(
     state: State<'_, AppState>,
     settings: TranslationSettings,
 ) -> Result<(), String> {
+    if settings.spoken_translation_enabled {
+        apple_speech::ensure_required_voice(&settings.target_language)?;
+    }
     let (overlay_mode_changed, speech_settings_changed) = {
         let mut preferences = state.preferences.lock();
         let overlay_changed =
@@ -679,6 +684,9 @@ fn start_translation(
     settings: TranslationSettings,
 ) -> Result<RuntimeState, String> {
     stop_preview_process(&state);
+    if settings.spoken_translation_enabled {
+        apple_speech::ensure_required_voice(&settings.target_language)?;
+    }
     state.account.translation_allowed()?;
     if !core_models_ready() {
         return Err("Download the core translation models before starting live translation".into());
@@ -878,6 +886,15 @@ fn stop_spoken_voice_preview(state: State<'_, AppState>) {
 #[tauri::command]
 fn list_apple_voices() -> Vec<apple_speech::SystemVoice> {
     apple_speech::available_voices()
+}
+
+#[tauri::command]
+fn open_apple_voice_settings() -> Result<(), String> {
+    Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension")
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not open Apple voice settings: {error}"))
 }
 
 #[tauri::command]
@@ -1169,6 +1186,7 @@ pub fn run(args: Args) {
             preview_spoken_voice,
             stop_spoken_voice_preview,
             list_apple_voices,
+            open_apple_voice_settings,
             list_output_devices,
             preview_apple_voice,
             open_voice_lab
