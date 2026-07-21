@@ -1,0 +1,27 @@
+name: Daily billing reconciliation
+
+on:
+  schedule:
+    - cron: "23 10 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Reconcile Stripe and product records
+        env:
+          SUPABASE_FUNCTIONS_URL: ${{ secrets.SUPABASE_FUNCTIONS_URL }}
+          BILLING_RECONCILE_SECRET: ${{ secrets.BILLING_RECONCILE_SECRET }}
+        shell: bash
+        run: |
+          test -n "$SUPABASE_FUNCTIONS_URL"
+          test -n "$BILLING_RECONCILE_SECRET"
+          curl --fail-with-body --silent --show-error \
+            --retry 3 --retry-all-errors \
+            --request POST \
+            --header "x-reconcile-secret: $BILLING_RECONCILE_SECRET" \
+            "$SUPABASE_FUNCTIONS_URL/billing-reconcile"

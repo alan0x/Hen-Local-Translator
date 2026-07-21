@@ -2,6 +2,7 @@
 //!
 //! A standalone desktop application for live speech translation.
 
+mod account;
 mod app;
 mod dataflow;
 mod preferences;

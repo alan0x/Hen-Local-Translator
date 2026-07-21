@@ -66,10 +66,37 @@ Test exactly: Vivian, Serena, 白杨, 杨阳, Ryan, Aiden, Maple, Juniper.
 3. A real upgrade, tamper rejection, and interrupted-download test require a new
    tagged build, so do not mark those passed from this same-version build.
 
-## Not ready to test yet
+## 8. Account and two-device license — after service configuration
 
-Account login, $49 checkout, billing portal, two-device management, and offline
-license enforcement are implemented on the server side but not connected to a
-deployed Supabase/Stripe environment. Apple Gatekeeper/notarization also awaits
+The current internal build deliberately shows that the account service is not
+configured and leaves local translation unlocked. After the protected Supabase,
+Stripe, and login settings are supplied, test all of these:
+
+1. Click **登录 / 创建账户** and confirm login completes in the browser and
+   returns to the installed app through `henlocal://`.
+2. Confirm the seven-day trial begins at first Mac activation, not account
+   creation.
+3. Confirm the device private key and session exist in macOS Keychain, while no
+   server billing/signing secret appears in the app bundle.
+4. Activate two Macs. Confirm both names and last-used dates appear.
+5. Attempt a third Mac. Confirm it shows the two active Macs, then allows one to
+   be deactivated before retrying.
+6. Deactivate the current Mac. Confirm it signs out and does not silently
+   reactivate itself.
+7. Disconnect the network and confirm a signed license works only through its
+   displayed date, never longer than seven days.
+8. Move the Mac clock backward and confirm it does not extend access.
+9. Subscribe for $49/month, open the billing portal, cancel, and confirm access
+   continues through the paid-through date.
+10. Fail a renewal and confirm the payment grace ends after three days instead
+    of extending every time the daily reconciliation runs.
+11. After expiry, confirm Settings and existing transcript export still work,
+    while starting a new translation shows a direct recovery message.
+
+## External items not ready to certify
+
+Account and licensing code now exists on both the server and desktop, but the
+real customer journey cannot be certified until it is connected to deployed
+Supabase/Stripe/login environments. Apple Gatekeeper/notarization also awaits
 Developer Program credentials. These are external setup blockers, not items to
 pretend passed locally.

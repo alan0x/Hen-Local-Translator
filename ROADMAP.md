@@ -57,7 +57,8 @@ Not included at launch:
 ## Existing foundation
 
 - [x] Rust/Tauri 2/Svelte desktop application exists.
-- [x] Workspace, Tauri, and frontend versions currently agree on `1.1.0`.
+- [x] Workspace, Tauri, and frontend versions currently agree on
+  `1.2.0-beta.1`.
 - [x] macOS `.app` and DMG build scripts exist.
 - [x] A macOS update installation helper exists.
 - [x] An update smoke-test script exists.
@@ -67,7 +68,8 @@ Not included at launch:
 - [x] The repository has an automated GitHub release workflow.
 - [ ] Release artifacts are Developer ID signed and Apple notarized.
 - [x] Update artifacts are cryptographically signed and verified by the app.
-- [ ] Accounts, billing, subscriptions, and device licensing exist.
+- [x] Accounts, billing, subscriptions, and device licensing are implemented;
+  production deployment and live-service acceptance testing remain external.
 - [x] Local session usage and value-estimate tracking exist.
 
 ## Phase 1: Release version control and macOS distribution
@@ -220,19 +222,23 @@ Goal: one account works on two computers with reasonable offline support.
 
 ### Tasks
 
-- [ ] Implement browser-based desktop authentication and secure callback.
-- [ ] Generate and store a per-device private key in macOS Keychain.
-- [ ] Register device public keys and friendly names with the backend.
+- [x] Implement browser-based PKCE desktop authentication and a validated,
+  bundle-registered `henlocal://` callback.
+- [x] Generate and store a per-device Ed25519 private key in macOS Keychain.
+- [x] Register device public keys and friendly names with the backend.
 - [x] Enforce a maximum of two active devices in a database transaction.
 - [x] Issue signed, device-bound seven-day license leases on the backend.
-- [ ] Verify leases locally using an embedded public key.
-- [ ] Refresh leases daily when the network is available.
-- [ ] Add subscription status to the desktop account/settings page.
-- [ ] Add a two-device management screen with last-used timestamps.
-- [ ] Let the customer choose which device to deactivate.
-- [ ] Block a third activation with a clear recovery path.
-- [ ] Keep settings and existing transcript export accessible after expiry.
-- [ ] Disable new translation only after trial/subscription/grace expiry.
+- [x] Verify canonical lease payloads locally using an embedded Ed25519 public
+  key, device binding, issue/expiry checks, and a maximum seven-day window.
+- [x] Refresh leases on launch and once daily when the network is available.
+- [x] Add subscription, paid-through, and offline-license status to Settings.
+- [x] Add a two-device management screen with last-used timestamps.
+- [x] Let the customer choose which device to deactivate; deactivating the
+  current Mac also signs it out instead of silently reactivating it.
+- [x] Block a third activation with the active-device list and a clear path to
+  deactivate one before retrying.
+- [x] Keep settings and existing transcript export accessible after expiry.
+- [x] Disable only new translation after trial/subscription/grace/lease expiry.
 
 ### Acceptance criteria
 
@@ -267,10 +273,11 @@ Goal: show product value without metering or uploading customer content.
 
 ### Acceptance criteria
 
-- [ ] Timer totals survive restart and crashes within the persistence window.
-- [ ] Paused or stopped translation is not counted.
-- [ ] The displayed estimate exposes its rate and formula.
-- [ ] Subscription access is never affected by usage totals.
+- [x] Timer totals survive restart and crashes within the 30-second persistence
+  window without inventing time after a crash.
+- [x] Stopped translation is not counted.
+- [x] The displayed estimate exposes its configurable rate and formula.
+- [x] Subscription access is independent of usage totals.
 
 ## Phase 6: Product, security, and lifecycle testing
 
@@ -334,9 +341,26 @@ Goal: validate the single subscription before introducing more pricing.
   translation model only when requested.
 - 2026-07-21: Begin the seven-day trial on first device activation, not account
   creation, and use a fixed three-day payment-failure grace period.
-
+- 2026-07-21: Store desktop sessions, PKCE verifier state, and per-device
+  private keys in macOS Keychain; ship only the license verification public key.
 ## Progress log
 
+- 2026-07-21: Rebuilt the current 76 MB internal DMG and 65 MB updater archive
+  with the official Tauri shell. The app, disk image, updater signature,
+  `latest.json`, `henlocal://` installed-app callback, version consistency, and
+  process launch smoke tests pass. The bundle is about 204 MB and contains no
+  model weights; final two-window visual confirmation remains on the morning
+  test checklist.
+- 2026-07-21: Added a Keychain-backed monotonic clock watermark and one-plan
+  validation to prevent a local clock rollback or an unknown signed plan from
+  extending desktop access.
+- 2026-07-21: Completed the configurable desktop side of accounts and two-Mac
+  licensing: secure browser PKCE callback, Keychain session/device identity,
+  server registration, signed local lease validation, daily refresh, paid and
+  offline status, device list/deactivation, third-device recovery, and new-
+  translation gating. Added protected backend deployment and daily billing-
+  reconciliation workflows. Real end-to-end acceptance remains blocked on the
+  external Supabase, Stripe, login-provider, and Apple configurations.
 - 2026-07-21: Added the Supabase/Stripe account foundation: minimal product
   records, activation-based trial, Checkout, Customer Portal, verified and
   idempotent webhooks, cancellation/paid-through handling, fixed payment grace,

@@ -5,6 +5,15 @@
     getSettings,
     getModelStatus,
     getUsage,
+    getAccountStatus,
+    beginAccountSignIn,
+    refreshAccount,
+    openAccountCheckout,
+    openAccountPortal,
+    deactivateAccountDevice,
+    signOutAccount,
+    listenAccountStatus,
+    listenAccountError,
     checkForUpdates,
     downloadUpdate,
     installDownloadedUpdate,
@@ -23,6 +32,7 @@
     type ModelStatus,
     type UpdateStatus,
     type UsageSnapshot,
+    type AccountStatus,
     type SettingsPayload,
     type TranslationSettings
   } from './lib/api';
@@ -74,6 +84,10 @@
   let usage: UsageSnapshot | null = null;
   let usageTimer: number | null = null;
   let comparisonRateDraft = '1.50';
+  let accountStatus: AccountStatus | null = null;
+  let accountBusy = false;
+  let accountError = '';
+  let accountRefreshTimer: number | null = null;
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
@@ -300,6 +314,86 @@
     };
   }
 
+  function formatAccountDate(value: string | null): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString(isEnglish() ? 'en-US' : 'zh-CN', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function entitlementLabel(source: string): string {
+    if (source === 'trial') return tr('7 天试用', '7-DAY TRIAL');
+    if (source === 'subscription') return tr('订阅有效', 'SUBSCRIPTION ACTIVE');
+    if (source === 'grace') return tr('付款宽限期', 'PAYMENT GRACE');
+    if (source === 'expired') return tr('已到期', 'EXPIRED');
+    if (source === 'not_started') return tr('试用尚未开始', 'TRIAL NOT STARTED');
+    return source.toUpperCase().replaceAll('_', ' ');
+  }
+
+  async function refreshAccountStatus(silent = false): Promise<void> {
+    if (!silent) accountBusy = true;
+    accountError = '';
+    try {
+      accountStatus = await refreshAccount();
+    } catch (error) {
+      accountError = String(error);
+    } finally {
+      if (!silent) accountBusy = false;
+    }
+  }
+
+  async function signInAccount(): Promise<void> {
+    accountBusy = true;
+    accountError = '';
+    try {
+      accountStatus = await beginAccountSignIn();
+    } catch (error) {
+      accountError = String(error);
+    } finally {
+      accountBusy = false;
+    }
+  }
+
+  async function accountBrowserAction(action: 'checkout' | 'portal'): Promise<void> {
+    accountBusy = true;
+    accountError = '';
+    try {
+      if (action === 'checkout') await openAccountCheckout();
+      else await openAccountPortal();
+    } catch (error) {
+      accountError = String(error);
+    } finally {
+      accountBusy = false;
+    }
+  }
+
+  async function deactivateDevice(deviceId: string, deviceName: string, current: boolean): Promise<void> {
+    const prompt = current
+      ? tr(`停用 ${deviceName}？当前电脑将退出登录并释放一个设备名额。`, `Deactivate ${deviceName}? This Mac will sign out and free one device slot.`)
+      : tr(`停用 ${deviceName} 并释放一个设备名额？`, `Deactivate ${deviceName} and free one device slot?`);
+    if (!window.confirm(prompt)) return;
+    accountBusy = true;
+    accountError = '';
+    try {
+      accountStatus = await deactivateAccountDevice(deviceId);
+    } catch (error) {
+      accountError = String(error);
+    } finally {
+      accountBusy = false;
+    }
+  }
+
+  async function signOut(): Promise<void> {
+    accountBusy = true;
+    accountError = '';
+    try {
+      accountStatus = await signOutAccount();
+    } catch (error) {
+      accountError = String(error);
+    } finally {
+      accountBusy = false;
+    }
+  }
+
   async function refreshModelStatus(): Promise<void> {
     try {
       modelStatus = await getModelStatus();
@@ -382,6 +476,8 @@
 
   onMount(() => {
     let unlisten: () => void = () => undefined;
+    let unlistenAccount: () => void = () => undefined;
+    let unlistenAccountError: () => void = () => undefined;
     void getSettings().then((data) => {
       payload = data;
       settings = { ...data.settings };
@@ -398,6 +494,15 @@
       errorMessage = String(error);
     });
     void listenRuntime(applyRuntime).then((cleanup) => { unlisten = cleanup; });
+    void listenAccountStatus((status) => { accountStatus = status; accountError = ''; }).then((cleanup) => { unlistenAccount = cleanup; });
+    void listenAccountError((message) => { accountError = message; }).then((cleanup) => { unlistenAccountError = cleanup; });
+    void getAccountStatus().then((status) => {
+      accountStatus = status;
+      if (status.configured) void refreshAccountStatus(true);
+    }).catch((error) => { accountError = String(error); });
+    accountRefreshTimer = window.setInterval(() => {
+      if (accountStatus?.configured && accountStatus.signedIn) void refreshAccountStatus(true);
+    }, 24 * 60 * 60 * 1000);
     void refreshModelStatus();
     void refreshUsage();
     usageTimer = window.setInterval(() => void refreshUsage(), 1000);
@@ -409,8 +514,11 @@
       clearPreviewTimer();
       if (modelTimer !== null) window.clearInterval(modelTimer);
       if (usageTimer !== null) window.clearInterval(usageTimer);
+      if (accountRefreshTimer !== null) window.clearInterval(accountRefreshTimer);
       void stopSpokenVoicePreview();
       unlisten();
+      unlistenAccount();
+      unlistenAccountError();
     };
   });
 </script>
@@ -629,6 +737,47 @@
             {/each}
           </div>
         </div>
+        {#if accountStatus}
+          <section class="account-settings">
+            <div class="account-heading">
+              <div><strong>{tr('账户与订阅', 'ACCOUNT & SUBSCRIPTION')}</strong><small>{accountStatus.email ?? tr('每月 $49 · 两台电脑', '$49/MONTH · TWO MACS')}</small></div>
+              {#if accountStatus.configured && accountStatus.signedIn}<span class:valid={accountStatus.licenseValid}>{accountStatus.licenseValid ? tr('授权有效', 'LICENSE READY') : tr('需要联网', 'REFRESH NEEDED')}</span>{/if}
+            </div>
+            {#if !accountStatus.configured}
+              <p class="account-pending">{tr('此内部版本尚未连接正式账户服务；当前不会限制本地翻译。', 'This internal build is not connected to the production account service; local translation remains unlocked.')}</p>
+            {:else if !accountStatus.signedIn}
+              <div class="account-signin">
+                <p>{tr('登录或创建账户后开始 7 天试用。登录将在安全浏览器窗口完成。', 'Sign in or create an account to start the 7-day trial. Authentication finishes in your secure browser.')}</p>
+                <button disabled={accountBusy} on:click={signInAccount}>{accountBusy ? tr('请稍候…', 'PLEASE WAIT…') : tr('登录 / 创建账户', 'SIGN IN / CREATE ACCOUNT')}</button>
+              </div>
+            {:else}
+              <div class="account-summary">
+                <div><small>{tr('状态', 'STATUS')}</small><strong>{entitlementLabel(accountStatus.entitlementSource)}</strong></div>
+                <div><small>{tr('可用至', 'ACCESS UNTIL')}</small><strong>{formatAccountDate(accountStatus.accessUntil)}</strong></div>
+                <div><small>{tr('离线授权至', 'OFFLINE UNTIL')}</small><strong>{formatAccountDate(accountStatus.leaseExpiresAt)}</strong></div>
+              </div>
+              <div class="account-actions">
+                {#if accountStatus.entitlementSource === 'trial' || accountStatus.entitlementSource === 'not_started' || accountStatus.entitlementSource === 'expired'}
+                  <button disabled={accountBusy} on:click={() => accountBrowserAction('checkout')}>{tr('订阅 $49/月', 'SUBSCRIBE · $49/MO')}</button>
+                {/if}
+                <button disabled={accountBusy} on:click={() => accountBrowserAction('portal')}>{tr('管理付款与取消', 'MANAGE BILLING')}</button>
+                <button disabled={accountBusy} on:click={() => refreshAccountStatus()}>{tr('刷新授权', 'REFRESH LICENSE')}</button>
+              </div>
+              {#if !accountStatus.licenseValid}<p class="account-warning">{accountStatus.message}</p>{/if}
+              <div class="device-list">
+                <div class="device-list-heading"><strong>{tr('已激活电脑', 'ACTIVE MACS')}</strong><small>{accountStatus.devices.filter((device) => !device.deactivatedAt).length} / 2</small></div>
+                {#each accountStatus.devices.filter((device) => !device.deactivatedAt) as device}
+                  <div class="device-row">
+                    <div><strong>{device.friendlyName}{device.current ? tr(' · 此电脑', ' · THIS MAC') : ''}</strong><small>{tr('最近使用', 'LAST USED')} {formatAccountDate(device.lastUsedAt)}</small></div>
+                    <button disabled={accountBusy} on:click={() => deactivateDevice(device.id, device.friendlyName, device.current)}>{tr('停用', 'DEACTIVATE')}</button>
+                  </div>
+                {/each}
+              </div>
+              <button class="account-signout" disabled={accountBusy} on:click={signOut}>{tr('退出登录', 'SIGN OUT')}</button>
+            {/if}
+            {#if accountError}<p class="account-error">{accountError}</p>{/if}
+          </section>
+        {/if}
         {#if modelStatus}
           <section class="model-settings">
             <div class="model-row">

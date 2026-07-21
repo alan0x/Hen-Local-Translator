@@ -1,11 +1,14 @@
 import { admin, env } from "./clients.ts";
 import type { Entitlement } from "./entitlement.ts";
 
-function fromBase64(value: string): Uint8Array {
-  return Uint8Array.from(
+function fromBase64(value: string): ArrayBuffer {
+  const decoded = Uint8Array.from(
     atob(value.replace(/\s/g, "")),
     (character) => character.charCodeAt(0),
   );
+  const buffer = new ArrayBuffer(decoded.byteLength);
+  new Uint8Array(buffer).set(decoded);
+  return buffer;
 }
 
 function toBase64(value: ArrayBuffer): string {
@@ -61,5 +64,9 @@ export async function issueLease(
     lease_digest: digest,
   });
   if (error) throw error;
-  return { payload, signature: toBase64(signature) };
+  return {
+    payload,
+    canonicalPayload: canonical,
+    signature: toBase64(signature),
+  };
 }

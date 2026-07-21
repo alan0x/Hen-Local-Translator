@@ -78,6 +78,29 @@ export interface UsageSnapshot {
   monthKey: string;
 }
 
+export interface AccountDevice {
+  id: string;
+  friendlyName: string;
+  activatedAt: string;
+  lastUsedAt: string;
+  deactivatedAt: string | null;
+  current: boolean;
+}
+
+export interface AccountStatus {
+  configured: boolean;
+  signedIn: boolean;
+  email: string | null;
+  subscriptionState: string;
+  entitlementSource: string;
+  accessUntil: string | null;
+  licenseValid: boolean;
+  leaseExpiresAt: string | null;
+  currentDeviceId: string | null;
+  devices: AccountDevice[];
+  message: string;
+}
+
 let pendingUpdate: Update | null = null;
 
 export interface Sentence {
@@ -256,6 +279,81 @@ export async function setUsageComparisonRate(rate: number): Promise<UsageSnapsho
   if (isTauri()) return invoke<UsageSnapshot>('set_usage_comparison_rate', { rate });
   const usage = await getUsage();
   return { ...usage, comparisonRatePerMinute: rate, estimatedValue: usage.lifetimeSeconds / 60 * rate };
+}
+
+const previewAccount: AccountStatus = {
+  configured: false,
+  signedIn: false,
+  email: null,
+  subscriptionState: 'not_configured',
+  entitlementSource: 'not_configured',
+  accessUntil: null,
+  licenseValid: false,
+  leaseExpiresAt: null,
+  currentDeviceId: null,
+  devices: [],
+  message: 'Account service is not configured in this internal build'
+};
+
+const previewSignedInAccount: AccountStatus = {
+  configured: true,
+  signedIn: true,
+  email: 'hello@henlocal.test',
+  subscriptionState: 'trialing',
+  entitlementSource: 'trial',
+  accessUntil: '2026-07-28T12:00:00.000Z',
+  licenseValid: true,
+  leaseExpiresAt: '2026-07-28T12:00:00.000Z',
+  currentDeviceId: 'preview-device-1',
+  devices: [
+    { id: 'preview-device-1', friendlyName: 'Haochen’s MacBook Pro', activatedAt: '2026-07-21T12:00:00.000Z', lastUsedAt: '2026-07-21T12:00:00.000Z', deactivatedAt: null, current: true },
+    { id: 'preview-device-2', friendlyName: 'Studio Mac', activatedAt: '2026-07-20T12:00:00.000Z', lastUsedAt: '2026-07-20T12:00:00.000Z', deactivatedAt: null, current: false }
+  ],
+  message: 'License is ready for offline translation'
+};
+
+function browserPreviewAccount(): AccountStatus {
+  const signedIn = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('account') === '1';
+  return structuredClone(signedIn ? previewSignedInAccount : previewAccount);
+}
+
+export async function getAccountStatus(): Promise<AccountStatus> {
+  return isTauri() ? invoke<AccountStatus>('get_account_status') : browserPreviewAccount();
+}
+
+export async function beginAccountSignIn(): Promise<AccountStatus> {
+  return isTauri() ? invoke<AccountStatus>('begin_account_sign_in') : browserPreviewAccount();
+}
+
+export async function refreshAccount(): Promise<AccountStatus> {
+  return isTauri() ? invoke<AccountStatus>('refresh_account') : browserPreviewAccount();
+}
+
+export async function openAccountCheckout(): Promise<void> {
+  if (isTauri()) await invoke('open_account_checkout');
+}
+
+export async function openAccountPortal(): Promise<void> {
+  if (isTauri()) await invoke('open_account_portal');
+}
+
+export async function deactivateAccountDevice(deviceId: string): Promise<AccountStatus> {
+  if (isTauri()) return invoke<AccountStatus>('deactivate_account_device', { deviceId });
+  return browserPreviewAccount();
+}
+
+export async function signOutAccount(): Promise<AccountStatus> {
+  return isTauri() ? invoke<AccountStatus>('sign_out_account') : browserPreviewAccount();
+}
+
+export async function listenAccountStatus(handler: (status: AccountStatus) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return () => undefined;
+  return listen<AccountStatus>('account-status', ({ payload }) => handler(payload));
+}
+
+export async function listenAccountError(handler: (message: string) => void): Promise<UnlistenFn> {
+  if (!isTauri()) return () => undefined;
+  return listen<string>('account-error', ({ payload }) => handler(payload));
 }
 
 export async function startTranslation(settings: TranslationSettings): Promise<RuntimeState> {

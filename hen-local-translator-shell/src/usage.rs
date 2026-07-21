@@ -217,8 +217,11 @@ mod tests {
 
     #[test]
     fn snapshot_value_uses_visible_rate() {
-        let directory =
-            std::env::temp_dir().join(format!("hen-local-usage-test-{}", std::process::id()));
+        let directory = std::env::temp_dir().join(format!(
+            "hen-local-usage-test-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
         let tracker = UsageTracker::load(directory.join("usage.json"));
         {
             let mut state = tracker.state.lock();
@@ -226,6 +229,48 @@ mod tests {
             state.stored.comparison_rate_per_minute = 2.0;
         }
         assert_eq!(tracker.snapshot().estimated_value, 4.0);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn checkpoint_survives_restart_without_counting_crash_gap() {
+        let directory = std::env::temp_dir().join(format!(
+            "hen-local-usage-restart-test-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let path = directory.join("usage.json");
+        let tracker = UsageTracker::load(path.clone());
+        tracker.start().unwrap();
+        tracker.state.lock().session_started = Some(Instant::now() - Duration::from_secs(65));
+        tracker.checkpoint().unwrap();
+        assert_eq!(tracker.snapshot().lifetime_seconds, 65);
+        drop(tracker);
+
+        let recovered = UsageTracker::load(path);
+        let snapshot = recovered.snapshot();
+        assert_eq!(snapshot.current_session_seconds, 0);
+        assert_eq!(snapshot.lifetime_seconds, 65);
+        assert!(!snapshot.running);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn stopping_completes_one_session_and_stops_the_clock() {
+        let directory = std::env::temp_dir().join(format!(
+            "hen-local-usage-stop-test-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let tracker = UsageTracker::load(directory.join("usage.json"));
+        tracker.start().unwrap();
+        tracker.state.lock().session_started = Some(Instant::now() - Duration::from_secs(12));
+        tracker.stop().unwrap();
+        let snapshot = tracker.snapshot();
+        assert_eq!(snapshot.current_session_seconds, 0);
+        assert_eq!(snapshot.lifetime_seconds, 12);
+        assert_eq!(snapshot.completed_sessions, 1);
+        assert!(!snapshot.running);
         let _ = fs::remove_dir_all(directory);
     }
 }

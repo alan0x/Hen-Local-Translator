@@ -1,4 +1,5 @@
 use crate::{
+    account::{AccountManager, AccountStatus},
     dataflow::{render_translation_dataflow, RenderOptions},
     preferences::{self, AppPreferences},
     runtime::{RuntimeEvent, TranslationRuntime},
@@ -21,6 +22,7 @@ use tauri::{
     Emitter, LogicalSize, Manager, Size, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
     WindowEvent,
 };
+use tauri_plugin_deep_link::DeepLinkExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -171,6 +173,7 @@ struct AppState {
     model_download_process: Mutex<Option<(String, Child)>>,
     subtitle_preview_visible: Mutex<bool>,
     usage: Arc<UsageTracker>,
+    account: Arc<AccountManager>,
 }
 
 impl AppState {
@@ -179,6 +182,7 @@ impl AppState {
         let settings = TranslationSettings::from(&preferences);
         let runtime = TranslationRuntime::new();
         let usage = UsageTracker::load(preferences::preferences_dir().join("usage.json"));
+        let account = Arc::new(AccountManager::new());
         let state = Self {
             preferences: Mutex::new(preferences),
             runtime,
@@ -188,6 +192,7 @@ impl AppState {
             model_download_process: Mutex::new(None),
             subtitle_preview_visible: Mutex::new(true),
             usage,
+            account,
         };
         state.sync_shared_state();
         state.show_subtitle_preview(&settings);
@@ -626,6 +631,7 @@ fn start_translation(
     state: State<'_, AppState>,
     settings: TranslationSettings,
 ) -> Result<RuntimeState, String> {
+    state.account.translation_allowed()?;
     if !core_models_ready() {
         return Err("Download the core translation models before starting live translation".into());
     }
@@ -678,6 +684,44 @@ fn start_translation(
     };
     *state.runtime_state.lock() = next.clone();
     Ok(next)
+}
+
+#[tauri::command]
+fn get_account_status(state: State<'_, AppState>) -> AccountStatus {
+    state.account.status()
+}
+
+#[tauri::command]
+fn begin_account_sign_in(state: State<'_, AppState>) -> Result<AccountStatus, String> {
+    state.account.begin_sign_in()
+}
+
+#[tauri::command]
+async fn refresh_account(state: State<'_, AppState>) -> Result<AccountStatus, String> {
+    state.account.refresh().await
+}
+
+#[tauri::command]
+async fn open_account_checkout(state: State<'_, AppState>) -> Result<(), String> {
+    state.account.checkout().await
+}
+
+#[tauri::command]
+async fn open_account_portal(state: State<'_, AppState>) -> Result<(), String> {
+    state.account.portal().await
+}
+
+#[tauri::command]
+async fn deactivate_account_device(
+    state: State<'_, AppState>,
+    device_id: String,
+) -> Result<AccountStatus, String> {
+    state.account.deactivate_device(&device_id).await
+}
+
+#[tauri::command]
+fn sign_out_account(state: State<'_, AppState>) -> Result<AccountStatus, String> {
+    state.account.sign_out()
 }
 
 #[tauri::command]
@@ -1015,11 +1059,40 @@ fn start_event_bridge(app_handle: tauri::AppHandle) {
 pub fn run(args: Args) {
     let cli_dataflow = args.dataflow.clone();
     tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
             app.manage(AppState::new(resource_dir));
+            {
+                let app_handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let callback = url.to_string();
+                        let handle = app_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let account = {
+                                let state = handle.state::<AppState>();
+                                state.account.clone()
+                            };
+                            let result = account.complete_sign_in(&callback).await;
+                            match result {
+                                Ok(status) => {
+                                    let _ = handle.emit_to("main", "account-status", status);
+                                    if let Some(window) = handle.get_webview_window("main") {
+                                        let _ = window.show();
+                                        let _ = window.set_focus();
+                                    }
+                                }
+                                Err(error) => {
+                                    let _ = handle.emit_to("main", "account-error", error);
+                                }
+                            }
+                        });
+                    }
+                });
+            }
             {
                 let state = app.state::<AppState>();
                 usage::start_checkpoint_loop(state.usage.clone());
@@ -1054,6 +1127,13 @@ pub fn run(args: Args) {
             stop_translation,
             get_usage,
             set_usage_comparison_rate,
+            get_account_status,
+            begin_account_sign_in,
+            refresh_account,
+            open_account_checkout,
+            open_account_portal,
+            deactivate_account_device,
+            sign_out_account,
             get_overlay_state,
             open_transcript_history,
             toggle_subtitle_preview,

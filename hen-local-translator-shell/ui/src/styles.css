@@ -175,6 +175,33 @@ select:disabled, button:disabled { cursor: not-allowed; }
 .theme-mark { width: 34px; height: 34px; display: block; background: var(--theme-swatch); -webkit-mask: var(--brand-mark) center / contain no-repeat; mask: var(--brand-mark) center / contain no-repeat; }
 .privacy-note { margin: 0; padding: 16px 18px; color: var(--muted); font-size: 12px; }
 
+.account-settings { border-top: 1px solid var(--line); padding: 13px 18px; display: grid; gap: 10px; }
+.account-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.account-heading > div { min-width: 0; display: grid; gap: 4px; }
+.account-heading strong, .device-list-heading strong { font-size: 11px; letter-spacing: .04em; }
+.account-heading small, .device-list-heading small, .device-row small { color: var(--muted); font-size: 9px; }
+.account-heading > span { padding: 4px 6px; border: 1px solid #c8c9cb; color: var(--muted); font-size: 8px; font-weight: 780; letter-spacing: .05em; }
+.account-heading > span.valid { border-color: var(--accent); color: var(--ink); box-shadow: inset 0 -2px var(--accent); }
+.account-pending, .account-signin p, .account-error, .account-warning { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.account-signin { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+.account-settings button { min-height: 30px; padding: 0 10px; border: 1px solid var(--ink); background: #fff; font-size: 9px; font-weight: 760; }
+.account-settings button:not(:disabled):hover { background: var(--ink); color: #fff; }
+.account-signin button, .account-actions button:first-child { background: var(--accent); color: var(--accent-on-solid); }
+.account-summary { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); }
+.account-summary > div { min-width: 0; padding: 8px; display: grid; gap: 4px; border-right: 1px solid var(--line); }
+.account-summary > div:last-child { border-right: 0; }
+.account-summary small { color: var(--muted); font-size: 8px; }
+.account-summary strong { overflow: hidden; text-overflow: ellipsis; font-size: 10px; white-space: nowrap; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.device-list { border-top: 1px solid var(--line); }
+.device-list-heading, .device-row { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
+.device-row > div { min-width: 0; display: grid; gap: 3px; }
+.device-row strong { overflow: hidden; text-overflow: ellipsis; font-size: 10px; white-space: nowrap; }
+.device-row button { min-height: 26px; }
+.account-signout { justify-self: start; border-color: var(--line) !important; color: var(--muted); }
+.account-error { color: #bd241d; font-weight: 700; }
+.account-warning { padding: 7px 8px; background: #fff4dc; color: #6e4900; font-weight: 680; }
+
 .model-settings { border-top: 1px solid var(--line); }
 .model-row { min-height: 58px; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #dedfe1; }
 .model-row > div { min-width: 0; display: grid; gap: 4px; }

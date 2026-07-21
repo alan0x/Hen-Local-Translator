@@ -1,0 +1,89 @@
+name: Deploy account and licensing backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment to deploy
+        required: true
+        type: choice
+        options:
+          - development
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify required protected secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_MONTHLY_PRICE_ID: ${{ secrets.STRIPE_MONTHLY_PRICE_ID }}
+          LICENSE_PRIVATE_KEY_PKCS8_BASE64: ${{ secrets.LICENSE_PRIVATE_KEY_PKCS8_BASE64 }}
+          BILLING_RECONCILE_SECRET: ${{ secrets.BILLING_RECONCILE_SECRET }}
+        shell: bash
+        run: |
+          required=(
+            SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF SUPABASE_DB_PASSWORD
+            STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_MONTHLY_PRICE_ID
+            LICENSE_PRIVATE_KEY_PKCS8_BASE64 BILLING_RECONCILE_SECRET
+          )
+          for name in "${required[@]}"; do
+            test -n "${!name}" || { echo "Missing protected secret: $name" >&2; exit 1; }
+          done
+
+      - name: Link project and apply migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Configure Edge Function secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_MONTHLY_PRICE_ID: ${{ secrets.STRIPE_MONTHLY_PRICE_ID }}
+          STRIPE_CHECKOUT_SUCCESS_URL: ${{ vars.STRIPE_CHECKOUT_SUCCESS_URL }}
+          STRIPE_CHECKOUT_CANCEL_URL: ${{ vars.STRIPE_CHECKOUT_CANCEL_URL }}
+          STRIPE_PORTAL_RETURN_URL: ${{ vars.STRIPE_PORTAL_RETURN_URL }}
+          LICENSE_PRIVATE_KEY_PKCS8_BASE64: ${{ secrets.LICENSE_PRIVATE_KEY_PKCS8_BASE64 }}
+          BILLING_RECONCILE_SECRET: ${{ secrets.BILLING_RECONCILE_SECRET }}
+        run: |
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" \
+            STRIPE_SECRET_KEY="$STRIPE_SECRET_KEY" \
+            STRIPE_WEBHOOK_SECRET="$STRIPE_WEBHOOK_SECRET" \
+            STRIPE_MONTHLY_PRICE_ID="$STRIPE_MONTHLY_PRICE_ID" \
+            STRIPE_CHECKOUT_SUCCESS_URL="$STRIPE_CHECKOUT_SUCCESS_URL" \
+            STRIPE_CHECKOUT_CANCEL_URL="$STRIPE_CHECKOUT_CANCEL_URL" \
+            STRIPE_PORTAL_RETURN_URL="$STRIPE_PORTAL_RETURN_URL" \
+            LICENSE_PRIVATE_KEY_PKCS8_BASE64="$LICENSE_PRIVATE_KEY_PKCS8_BASE64" \
+            LICENSE_KEY_ID="hen-local-license-v1" \
+            BILLING_RECONCILE_SECRET="$BILLING_RECONCILE_SECRET"
+
+      - name: Deploy Edge Functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          for function in billing-api license-api stripe-webhook billing-reconcile; do
+            supabase functions deploy "$function" --project-ref "$SUPABASE_PROJECT_REF"
+          done
