@@ -399,6 +399,10 @@ Goal: validate the single subscription before introducing more pricing.
   speech interface and has low runtime memory overhead. Downloaded Chinese Siri
   Live Speech voices are absent from the current public speech APIs and are not
   wired through private Apple interfaces.
+- 2026-07-21: Reproduced a visually blank WKWebView after the release bundle was
+  replaced while that same app was still running. Verified the built UI and
+  signed bundle render correctly after a clean quit, and made the packaging
+  script refuse to overwrite a live Hen Local Translator process.
 - 2026-07-21: Added launch drafts for privacy, terms, cancellation/refunds,
   support/license recovery, and release recovery. Verified all three downloaded
   MLX model cards declare Apache-2.0; preview-recording provenance remains a

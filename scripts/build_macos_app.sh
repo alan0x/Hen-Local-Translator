@@ -23,6 +23,15 @@ BUILD_VERSION="${HEN_LOCAL_BUILD_VERSION:-$MARKETING_VERSION}"
 BUILD_TARGET_DIR="${HEN_LOCAL_CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/hen-local-translator-cargo-target}"
 TAURI_PRODUCT_NAME="Hen Local Translator"
 
+ensure_translator_is_not_running() {
+  if pgrep -x hen-local-translator >/dev/null 2>&1; then
+    echo "Hen Local Translator is currently running." >&2
+    echo "Quit every Hen Local Translator window before rebuilding the app bundle." >&2
+    echo "Replacing a live macOS bundle can leave WKWebView attached to stale files and show a blank window." >&2
+    exit 1
+  fi
+}
+
 usage() {
   cat <<EOF
 Usage:
@@ -75,6 +84,11 @@ if [[ ! "$BUILD_VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
   echo "macOS build version must contain one to three numeric components: $BUILD_VERSION"
   exit 1
 fi
+
+# Never mutate an application bundle while macOS still has its executable and
+# WebContent processes open. This check is repeated immediately before the
+# replacement because the build itself can take several minutes.
+ensure_translator_is_not_running
 
 mkdir -p "$BUILD_TARGET_DIR" "$OUT_DIR"
 export CARGO_TARGET_DIR="$BUILD_TARGET_DIR"
@@ -163,6 +177,7 @@ if [[ ! -d "$TAURI_APP" ]]; then
 fi
 
 APP_DIR="$OUT_DIR/$APP_NAME.app"
+ensure_translator_is_not_running
 rm -rf "$APP_DIR"
 cp -R "$TAURI_APP" "$APP_DIR"
 
