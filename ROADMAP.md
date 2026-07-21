@@ -25,8 +25,8 @@ Status notation:
 
 ## Current focus
 
-- 🔄 **In progress:** Run `v1.2.0-beta.1` through the GitHub release
-  workflow as an explicitly unsigned internal-test draft.
+- 🔄 **In progress:** Add the official Tauri 2 updater foundation and a
+  manual **Check for Updates** control to the application.
 
 Apple signing/notarization remains a production-release blocker. Once the paid
 Developer Program membership is active, configure the five required GitHub
@@ -94,14 +94,12 @@ Goal: one Git tag produces a reproducible, trusted macOS release.
 - [x] Fail CI when version locations disagree.
 - [x] Add a changelog and release-note convention.
 - [x] Add a GitHub Actions workflow triggered by `v*` tags.
-- [ ] Verify the workflow builds the frontend and all required Rust/ML
-  executables on GitHub's Apple Silicon runner; implementation is complete and
-  awaits the first test tag.
+- [x] Verify the workflow builds the frontend and all required Rust/ML
+  executables on GitHub's Apple Silicon runner.
 - [ ] Sign embedded executables in the correct order.
 - [ ] Sign the app with an Apple Developer ID Application certificate.
 - [ ] Enable hardened runtime with the required entitlements.
-- [ ] Verify DMG creation on the GitHub runner; implementation is complete and
-  awaits the first test tag.
+- [x] Verify DMG creation on the GitHub runner.
 - [ ] Submit the app/DMG to Apple notarization and staple the ticket.
 - [ ] Generate Tauri updater artifacts and signatures.
 - [ ] Generate `latest.json`; SHA-256 checksum generation is complete.
@@ -327,6 +325,12 @@ Goal: validate the single subscription before introducing more pricing.
 
 ## Progress log
 
+- 2026-07-20: Verified the `v1.2.0-beta.1` unsigned internal-test pipeline on a
+  clean GitHub Apple Silicon runner. The generated 91 MB DMG passed its SHA-256
+  checksum and disk-image verification, mounted successfully, contained the
+  native ARM64 `1.2.0-beta.1` executable and required resources, and passed a
+  controlled local launch test. The GitHub Release remains a draft and is
+  clearly labeled as unsigned and unsuitable for customers.
 - 2026-07-20: Allowed the release workflow to create a clearly labeled unsigned
   internal-test draft when Apple credentials are unavailable; public release
   remains blocked until Developer ID signing and notarization succeed.
