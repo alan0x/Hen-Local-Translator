@@ -113,8 +113,11 @@ fn speech_worker(receiver: Receiver<SpeechCommand>) {
         }
         if enabled && child.is_none() {
             if let Some(text) = queue.pop_front() {
-                let selected = select_voice(&installed, &language, &voice);
-                match spawn_say(selected.as_deref(), &text) {
+                let Some(selected) = select_voice(&installed, &language, &voice) else {
+                    log::warn!("Selected Hen Local voice is unavailable: {language} / {voice}");
+                    continue;
+                };
+                match spawn_say(&selected, &text) {
                     Ok(process) => child = Some(process),
                     Err(error) => log::error!("Could not start Apple speech: {error}"),
                 }
@@ -130,11 +133,9 @@ fn stop_child(child: &mut Option<Child>) {
     }
 }
 
-fn spawn_say(voice: Option<&str>, text: &str) -> Result<Child, std::io::Error> {
+fn spawn_say(voice: &str, text: &str) -> Result<Child, std::io::Error> {
     let mut command = Command::new("/usr/bin/say");
-    if let Some(voice) = voice {
-        command.arg("-v").arg(voice);
-    }
+    command.arg("-v").arg(voice);
     command
         .arg(text)
         .stdin(Stdio::null())
@@ -145,8 +146,9 @@ fn spawn_say(voice: Option<&str>, text: &str) -> Result<Child, std::io::Error> {
 
 pub fn preview(voice: &str, language: &str, text: &str) -> Result<Child, String> {
     let installed = installed_voices();
-    let selected = select_voice(&installed, language, normalize_voice_id(voice));
-    spawn_say(selected.as_deref(), text)
+    let selected = select_voice(&installed, language, normalize_voice_id(voice))
+        .ok_or_else(|| format!("Selected Hen Local voice is unavailable for {language}"))?;
+    spawn_say(&selected, text)
         .map_err(|error| format!("Could not play Apple voice preview: {error}"))
 }
 
@@ -157,7 +159,7 @@ pub fn preview_named(name: &str, locale: &str) -> Result<Child, String> {
         .find(|voice| voice.name == name && voice.locale == locale)
         .ok_or_else(|| format!("Apple system voice is unavailable: {name} ({locale})"))?;
     let sample = audition_text(&voice.locale);
-    spawn_say(Some(&voice.name), sample)
+    spawn_say(&voice.name, sample)
         .map_err(|error| format!("Could not play Apple voice preview: {error}"))
 }
 
@@ -182,49 +184,19 @@ fn normalize_voice_id(voice: &str) -> &str {
     }
 }
 
-fn preferred_voice(language: &str, index: usize) -> &'static str {
+fn preferred_voice(language: &str, index: usize) -> Option<&'static str> {
     // These are the higher-quality Siri voices installed from macOS
     // Accessibility > Live Speech > Voice. They are exposed to `say` using
     // these exact names even though AVSpeechSynthesizer does not enumerate
     // them on current macOS releases.
     const EN: [&str; 5] = ["Voice 1", "Voice 2", "Voice 3", "Voice 4", "Voice 5"];
-    const ZH: [&str; 5] = [
-        "Yue (Premium)",
-        "Eddy (Chinese (China mainland))",
-        "Flo (Chinese (China mainland))",
-        "Reed (Chinese (China mainland))",
-        "Shelley (Chinese (China mainland))",
-    ];
-    const JA: [&str; 5] = [
-        "Kyoko",
-        "Otoya",
-        "Eddy (Japanese (Japan))",
-        "Flo (Japanese (Japan))",
-        "Reed (Japanese (Japan))",
-    ];
-    const FR: [&str; 5] = [
-        "Thomas",
-        "Amelie",
-        "Jacques",
-        "Eddy (French (France))",
-        "Flo (French (France))",
-    ];
+    const ZH: [&str; 2] = ["Yue (Premium)", "Tingting"];
     let voices = match language {
-        "zh" => &ZH,
-        "ja" => &JA,
-        "fr" => &FR,
-        _ => &EN,
+        "zh" => ZH.as_slice(),
+        "en" => EN.as_slice(),
+        _ => return None,
     };
-    voices[index.min(4)]
-}
-
-fn locale_prefix(language: &str) -> &'static str {
-    match language {
-        "zh" => "zh_",
-        "ja" => "ja_",
-        "fr" => "fr_",
-        _ => "en_",
-    }
+    voices.get(index).copied()
 }
 
 fn voice_index(voice: &str) -> usize {
@@ -237,16 +209,10 @@ fn voice_index(voice: &str) -> usize {
 }
 
 fn select_voice(installed: &[(String, String)], language: &str, voice: &str) -> Option<String> {
-    let preferred = preferred_voice(language, voice_index(voice));
+    let preferred = preferred_voice(language, voice_index(voice))?;
     installed
         .iter()
         .find(|(name, _)| name == preferred)
-        .or_else(|| {
-            let prefix = locale_prefix(language);
-            installed
-                .iter()
-                .find(|(_, locale)| locale.starts_with(prefix))
-        })
         .map(|(name, _)| name.clone())
 }
 
@@ -306,12 +272,9 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_an_installed_voice_for_the_language() {
+    fn never_falls_back_to_an_unselected_voice() {
         let installed = vec![("Fallback".into(), "fr_FR".into())];
-        assert_eq!(
-            select_voice(&installed, "fr", "apple-voice-2"),
-            Some("Fallback".into())
-        );
+        assert_eq!(select_voice(&installed, "fr", "apple-voice-2"), None);
     }
 
     #[test]
@@ -324,12 +287,20 @@ mod tests {
 
     #[test]
     fn maps_english_choices_to_siri_live_speech_voices() {
-        assert_eq!(preferred_voice("en", 0), "Voice 1");
-        assert_eq!(preferred_voice("en", 4), "Voice 5");
+        assert_eq!(preferred_voice("en", 0), Some("Voice 1"));
+        assert_eq!(preferred_voice("en", 4), Some("Voice 5"));
     }
 
     #[test]
     fn maps_first_chinese_choice_to_yue_premium() {
-        assert_eq!(preferred_voice("zh", 0), "Yue (Premium)");
+        assert_eq!(preferred_voice("zh", 0), Some("Yue (Premium)"));
+        assert_eq!(preferred_voice("zh", 1), Some("Tingting"));
+        assert_eq!(preferred_voice("zh", 2), None);
+    }
+
+    #[test]
+    fn has_no_unapproved_japanese_or_french_voice() {
+        assert_eq!(preferred_voice("ja", 0), None);
+        assert_eq!(preferred_voice("fr", 0), None);
     }
 }

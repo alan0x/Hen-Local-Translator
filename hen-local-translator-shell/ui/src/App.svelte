@@ -45,13 +45,11 @@
     { code: 'fr', zh: '法语', en: 'French' }
   ] as const;
   const fontSizes = ['16', '20', '24', '30', '36', '44', '52', '64', '80', '96', '120', '160'];
-  const spokenVoices = [
-    { id: 'apple-voice-1', zh: 'Apple 音色 1', en: 'Apple Voice 1', siri: 'Siri Voice 1' },
-    { id: 'apple-voice-2', zh: 'Apple 音色 2', en: 'Apple Voice 2', siri: 'Siri Voice 2' },
-    { id: 'apple-voice-3', zh: 'Apple 音色 3', en: 'Apple Voice 3', siri: 'Siri Voice 3' },
-    { id: 'apple-voice-4', zh: 'Apple 音色 4', en: 'Apple Voice 4', siri: 'Siri Voice 4' },
-    { id: 'apple-voice-5', zh: 'Apple 音色 5', en: 'Apple Voice 5', siri: 'Siri Voice 5' }
+  const chineseSpokenVoices = [
+    { id: 'apple-voice-1', name: 'Yue (Premium)' },
+    { id: 'apple-voice-2', name: 'Tingting' }
   ] as const;
+  const englishSpokenVoices = [1, 2, 3, 4, 5].map((number) => ({ id: `apple-voice-${number}`, name: `Voice ${number}` }));
   const accentThemes: Array<{ id: AccentTheme; zh: string; en: string; color: string }> = [
     { id: 'neon-blue', zh: '电光蓝', en: 'BLUE', color: '#0003FE' },
     { id: 'neon-orange', zh: '霓虹橙', en: 'ORANGE', color: '#FF5705' },
@@ -115,19 +113,21 @@
     return value;
   }
 
-  function voicesForTarget(_target: string) {
-    return spokenVoices;
-  }
-
-  function spokenVoiceName(voice: (typeof spokenVoices)[number]): string {
-    if (settings?.targetLanguage === 'en') return voice.siri;
-    if (settings?.targetLanguage === 'zh' && voice.id === 'apple-voice-1') return 'Yue (Premium)';
-    return isEnglish() ? voice.en : voice.zh;
+  function voicesForTarget(target: string): ReadonlyArray<{ id: string; name: string }> {
+    if (target === 'zh') return chineseSpokenVoices;
+    if (target === 'en') return englishSpokenVoices;
+    return [];
   }
 
   function syncVoiceToTarget(): boolean {
     if (!settings) return false;
     const available = voicesForTarget(settings.targetLanguage);
+    if (available.length === 0) {
+      const changed = settings.spokenTranslationEnabled || settings.spokenTranslationVoice !== null;
+      settings.spokenTranslationEnabled = false;
+      settings.spokenTranslationVoice = null;
+      return changed;
+    }
     const current = settings.spokenTranslationVoice;
     if (current && available.some((voice) => voice.id === current)) return false;
     settings.spokenTranslationVoice = available[0]?.id ?? 'apple-voice-1';
@@ -206,6 +206,12 @@
 
   async function setSpokenTranslation(enabled: boolean): Promise<void> {
     if (!settings) return;
+    if (enabled && voicesForTarget(settings.targetLanguage).length === 0) {
+      settings.spokenTranslationEnabled = false;
+      settings = { ...settings };
+      errorMessage = tr('当前目标语言还没有选定播报音色。', 'No approved voice is available for the target language.');
+      return;
+    }
     if (!enabled) await stopVoicePreview();
     settings.spokenTranslationEnabled = enabled;
     settings = { ...settings };
@@ -652,7 +658,7 @@
             <span class="control-label">{tr('播报开关', 'SPEECH OUTPUT')}</span>
             <div class="segmented two">
               <button class:active={!settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(false)}>{tr('关', 'OFF')}</button>
-              <button class:active={settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(true)}>{tr('开', 'ON')}</button>
+              <button disabled={voicesForTarget(settings.targetLanguage).length === 0} class:active={settings.spokenTranslationEnabled} on:click={() => setSpokenTranslation(true)}>{tr('开', 'ON')}</button>
             </div>
           </div>
 
@@ -660,11 +666,15 @@
             <span class="control-label">{tr('播报音色', 'VOICE')} · {languageName(settings.targetLanguage)}</span>
             <div class="voice-picker-row">
               <select disabled={!settings.spokenTranslationEnabled} bind:value={settings.spokenTranslationVoice} on:change={selectSpokenVoice}>
-                {#each voicesForTarget(settings.targetLanguage) as voice}
-                  <option value={voice.id}>{spokenVoiceName(voice)}</option>
-                {/each}
+                {#if voicesForTarget(settings.targetLanguage).length === 0}
+                  <option value="">{tr('暂无已选音色', 'NO APPROVED VOICE')}</option>
+                {:else}
+                  {#each voicesForTarget(settings.targetLanguage) as voice}
+                    <option value={voice.id}>{voice.name}</option>
+                  {/each}
+                {/if}
               </select>
-              <button aria-label={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} title={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} class:playing={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1')} class="preview-button" type="button" disabled={!settings.spokenTranslationEnabled} on:click={playVoicePreview}>
+              <button aria-label={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} title={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} class:playing={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1')} class="preview-button" type="button" disabled={!settings.spokenTranslationEnabled || voicesForTarget(settings.targetLanguage).length === 0} on:click={playVoicePreview}>
                 <span aria-hidden="true">{previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? '■' : '▶'}</span>
               </button>
             </div>

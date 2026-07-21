@@ -403,6 +403,10 @@ Goal: validate the single subscription before introducing more pricing.
   replaced while that same app was still running. Verified the built UI and
   signed bundle render correctly after a clean quit, and made the packaging
   script refuse to overwrite a live Hen Local Translator process.
+- 2026-07-21: Finalized the Apple speech shortlist: Chinese uses only
+  `Yue (Premium)` and `Tingting`; English uses only Siri `Voice 1–5`. Removed
+  Japanese/French and generic installed-voice fallback paths so an unapproved
+  system voice can never be selected silently.
 - 2026-07-21: Added launch drafts for privacy, terms, cancellation/refunds,
   support/license recovery, and release recovery. Verified all three downloaded
   MLX model cards declare Apache-2.0; preview-recording provenance remains a

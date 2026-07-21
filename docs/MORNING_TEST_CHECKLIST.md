@@ -39,19 +39,19 @@ if anything is wrong.
 0. Confirm **译文播报** is off on a fresh/default preference file. Open
    Settings → **Apple 音色实验室**, filter Chinese and English,试听候选音色,
    star favorites, and copy the shortlist.
-1. For an English target, test exactly **Siri Voice 1–5** downloaded from
-   macOS Live Speech settings. For a Chinese target, test **Apple 音色 1–5** and
-   use the Voice Lab to shortlist better Chinese voices.
-2. Confirm the first Chinese choice is **Yue (Premium)** and compare its startup
-   speed and naturalness with the other Chinese candidates.
-3. Confirm every preview speaks the new Hen Local sample, not “这是一个充满
+1. For an English target, confirm the list contains exactly **Voice 1–5**.
+2. For a Chinese target, confirm the list contains exactly **Yue (Premium)**
+   and **Tingting**.
+3. For Japanese and French targets, confirm spoken translation is unavailable
+   and automatically switches off instead of choosing another system voice.
+4. Confirm every preview speaks the new Hen Local sample, not “这是一个充满
    希望的时代” and not “欢迎来到 Moxie Voice”.
-4. Start translation with speech enabled and confirm every completed translation
+5. Start translation with speech enabled and confirm every completed translation
    is spoken once, in order.
-5. Stop while a sentence is playing and confirm speech stops without leaving a
+6. Stop while a sentence is playing and confirm speech stops without leaving a
    `say` or Qwen TTS process behind.
-6. Confirm output follows the Mac system-default device.
-7. Confirm the app never asks to download a speech model and no Qwen TTS node
+7. Confirm output follows the Mac system-default device.
+8. Confirm the app never asks to download a speech model and no Qwen TTS node
    appears in the running Dora dataflow.
 
 
