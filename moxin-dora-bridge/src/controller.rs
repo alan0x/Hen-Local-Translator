@@ -8,12 +8,82 @@
 use crate::error::{BridgeError, BridgeResult};
 use crate::parser::{DataflowParser, ParsedDataflow};
 use parking_lot::RwLock;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
+
+const HEN_LOCAL_DATAFLOW_NAME: &str = "hen-local-live-translation";
+const HEN_LOCAL_REQUIRED_NODES: [&str; 4] = [
+    "asr",
+    "translator",
+    "moxin-mic-input",
+    "moxin-translation-listener",
+];
+
+fn json_lines(output: &[u8]) -> Vec<serde_json::Value> {
+    String::from_utf8_lossy(output)
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect()
+}
+
+fn is_hen_local_node_list(output: &[u8]) -> bool {
+    let nodes: HashSet<String> = json_lines(output)
+        .into_iter()
+        .filter_map(|value| value.get("node")?.as_str().map(str::to_string))
+        .collect();
+    HEN_LOCAL_REQUIRED_NODES
+        .iter()
+        .all(|required| nodes.contains(*required))
+}
+
+fn stop_stale_hen_local_dataflows(runtime_dir: &Path) {
+    let Ok(list) = Command::new("dora")
+        .args(["list", "--format", "json"])
+        .current_dir(runtime_dir)
+        .output()
+    else {
+        return;
+    };
+    if !list.status.success() {
+        return;
+    }
+
+    let running: Vec<String> = json_lines(&list.stdout)
+        .into_iter()
+        .filter(|value| value.get("status").and_then(|value| value.as_str()) == Some("Running"))
+        .filter_map(|value| value.get("uuid")?.as_str().map(str::to_string))
+        .collect();
+    for dataflow_id in running {
+        let Ok(nodes) = Command::new("dora")
+            .args([
+                "node",
+                "list",
+                "--dataflow",
+                &dataflow_id,
+                "--format",
+                "json",
+            ])
+            .current_dir(runtime_dir)
+            .output()
+        else {
+            continue;
+        };
+        if !nodes.status.success() || !is_hen_local_node_list(&nodes.stdout) {
+            continue;
+        }
+        info!("Stopping stale Hen Local dataflow: {dataflow_id}");
+        let _ = Command::new("dora")
+            .args(["stop", &dataflow_id, "--grace-duration", "2s"])
+            .current_dir(runtime_dir)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
 
 /// Dataflow state
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,11 +274,18 @@ impl DataflowController {
 
         let runtime_dir = Self::ensure_runtime_dir();
 
+        // Detached nodes survive a crash or force-quit. Older releases used a
+        // random flow name, so identify Hen Local flows by their node set and
+        // stop only those flows before starting the new fixed-name instance.
+        stop_stale_hen_local_dataflows(&runtime_dir);
+
         let mut cmd = Command::new("dora");
         cmd.arg("start")
             // Use the absolute path so dora always resolves node paths relative to
             // the actual dataflow file location.
             .arg(&self.dataflow_path)
+            .arg("--name")
+            .arg(HEN_LOCAL_DATAFLOW_NAME)
             .arg("--detach")
             .current_dir(&runtime_dir);
 
@@ -402,6 +479,30 @@ impl Drop for DataflowController {
         if let Some(mut daemon) = self.daemon_process.take() {
             let _ = daemon.kill();
         }
+    }
+}
+
+#[cfg(test)]
+mod stale_flow_tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_hen_local_flow_from_json_node_lines() {
+        let nodes = br#"{"node":"asr"}
+{"node":"translator"}
+{"node":"moxin-mic-input"}
+{"node":"moxin-translation-listener"}
+{"node":"moxin-audio-player"}
+"#;
+        assert!(is_hen_local_node_list(nodes));
+    }
+
+    #[test]
+    fn does_not_stop_an_unrelated_dora_flow() {
+        let nodes = br#"{"node":"camera"}
+{"node":"detector"}
+"#;
+        assert!(!is_hen_local_node_list(nodes));
     }
 }
 

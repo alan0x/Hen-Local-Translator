@@ -59,6 +59,10 @@ if [[ "$PROFILE" != "release" && "$PROFILE" != "dev" ]]; then
   echo "Unsupported profile: $PROFILE (expected release or dev)"
   exit 1
 fi
+PROFILE_DIR="$PROFILE"
+if [[ "$PROFILE" == "dev" ]]; then
+  PROFILE_DIR="debug"
+fi
 if [[ "$BUILD_TARGET_DIR" == *" "* ]]; then
   echo "Cargo target directory cannot contain spaces: $BUILD_TARGET_DIR"
   exit 1
@@ -77,7 +81,7 @@ export CARGO_TARGET_DIR="$BUILD_TARGET_DIR"
 export MOXIN_DORA_TARGET_DIR="$BUILD_TARGET_DIR"
 
 resolve_mlx_prebuilt_path() {
-  local build_dir="$BUILD_TARGET_DIR/$PROFILE/build"
+  local build_dir="$BUILD_TARGET_DIR/$PROFILE_DIR/build"
   if [[ -d "$build_dir" ]]; then
     find "$build_dir" -type d -path '*mlx-sys-*/out/mlx-prebuilt' 2>/dev/null | tail -n 1 || true
   fi
@@ -95,7 +99,7 @@ run_cargo_build() {
 
 CARGO_PROFILE_ARGS=(--release)
 if [[ "$PROFILE" == "dev" ]]; then
-  CARGO_PROFILE_ARGS=()
+  CARGO_PROFILE_ARGS=(--profile dev)
 fi
 
 echo "Building required local translation executables..."
@@ -126,11 +130,11 @@ stage_sidecar() {
   chmod +x "$SIDECAR_DIR/${name}-${TARGET_TRIPLE}"
 }
 stage_sidecar "$(command -v dora)" "dora"
-stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/dora-qwen3-asr" "dora-qwen3-asr"
-stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/dora-qwen35-translator" "dora-qwen35-translator"
-stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/qwen-tts-node" "qwen-tts-node"
-stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/hen-local-init" "hen-local-init"
-stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/mlx.metallib" "mlx.metallib"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/dora-qwen3-asr" "dora-qwen3-asr"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/dora-qwen35-translator" "dora-qwen35-translator"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/qwen-tts-node" "qwen-tts-node"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/hen-local-init" "hen-local-init"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/mlx.metallib" "mlx.metallib"
 
 if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
   LOCAL_UPDATER_KEY="$HOME/.tauri/hen-local-translator.key"
@@ -155,7 +159,7 @@ echo "Building the Tauri application bundle..."
   fi
 )
 
-TAURI_APP="$BUILD_TARGET_DIR/$PROFILE/bundle/macos/$TAURI_PRODUCT_NAME.app"
+TAURI_APP="$BUILD_TARGET_DIR/$PROFILE_DIR/bundle/macos/$TAURI_PRODUCT_NAME.app"
 if [[ ! -d "$TAURI_APP" ]]; then
   echo "Tauri app bundle not found: $TAURI_APP"
   exit 1

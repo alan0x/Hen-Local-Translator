@@ -79,7 +79,13 @@ pub fn render_translation_dataflow(
     };
 
     let rendered = absolutize_dataflow_paths(&template_path, &rendered);
-    let output = env::temp_dir().join("hen_local_translation_dataflow.yml");
+    // Keep concurrent app/test processes from overwriting the live dataflow
+    // with temporary test binaries. Reuse one file per process so normal
+    // start/stop cycles stay tidy without sharing state across processes.
+    let output = env::temp_dir().join(format!(
+        "hen_local_translation_dataflow_{}.yml",
+        std::process::id()
+    ));
     fs::write(&output, rendered)
         .map_err(|error| format!("Could not write rendered translation dataflow: {error}"))?;
     Ok(output)

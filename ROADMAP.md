@@ -345,6 +345,15 @@ Goal: validate the single subscription before introducing more pricing.
   private keys in macOS Keychain; ship only the license verification public key.
 ## Progress log
 
+- 2026-07-21: Fixed local translation getting stuck at startup. Bridge retries
+  now keep successful connections and reset only failed workers; shutdown
+  always stops the Dora flow even if a bridge disconnect reports an error.
+  Hen Local flows now use a stable name, single-instance launch is enforced,
+  per-process rendered dataflows cannot be overwritten by tests, and both old
+  random-name and new crash-orphaned Hen Local flows are safely detected and
+  stopped without touching unrelated Dora work. Verified real start, stop,
+  second start, forced-crash recovery, and legacy-flow recovery with ASR,
+  translation, and Qwen TTS all enabled.
 - 2026-07-21: Rebuilt the current 76 MB internal DMG and 65 MB updater archive
   with the official Tauri shell. The app, disk image, updater signature,
   `latest.json`, `henlocal://` installed-app callback, version consistency, and

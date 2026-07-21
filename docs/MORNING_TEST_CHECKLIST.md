@@ -30,6 +30,9 @@ if anything is wrong.
 3. Start and stop twice. Confirm the timer only moves while translating.
 4. Confirm subtitles render in both floating and full-screen modes.
 5. Confirm transcript export/settings remain unchanged.
+6. Force-quit once while translation is running, reopen, and start again.
+   Confirm it does not remain on **正在启动准备** and does not show
+   `Bridge already connected` or `Failed to connect to Dora`.
 
 ## 4. Eight voice previews
 

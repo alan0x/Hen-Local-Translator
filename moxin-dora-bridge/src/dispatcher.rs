@@ -16,6 +16,22 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
+fn connect_bridge(bridge: &mut dyn DoraBridge) -> BridgeResult<()> {
+    if bridge.is_connected() {
+        return Ok(());
+    }
+
+    // A previous attempt can leave a worker in Connecting/Error state. Reusing
+    // it without joining that worker creates a second Dora node with the same
+    // ID, while reconnecting bridges that already succeeded produces
+    // `Bridge already connected`. Normalize only the failed bridge before the
+    // next retry and leave healthy connections alone.
+    if bridge.state() != BridgeState::Disconnected {
+        bridge.disconnect()?;
+    }
+    bridge.connect()
+}
+
 /// Binding between a widget and its dora node
 #[derive(Debug, Clone)]
 pub struct WidgetBinding {
@@ -135,7 +151,7 @@ impl DynamicNodeDispatcher {
         let mut errors = Vec::new();
 
         for (node_id, bridge) in &mut self.bridges {
-            match bridge.connect() {
+            match connect_bridge(bridge.as_mut()) {
                 Ok(()) => {
                     info!("Connected bridge: {}", node_id);
                     // Update binding state
@@ -269,14 +285,9 @@ impl DynamicNodeDispatcher {
 
     /// Stop the dataflow and disconnect all bridges (graceful, default 15s)
     pub fn stop(&mut self) -> BridgeResult<()> {
-        // Disconnect bridges first
-        self.disconnect_all()?;
-
-        // Stop the dataflow
-        let mut controller = self.controller.write();
-        controller.stop()?;
-
-        Ok(())
+        let disconnect_result = self.disconnect_all();
+        let stop_result = self.controller.write().stop();
+        combine_shutdown_results(disconnect_result, stop_result)
     }
 
     /// Stop the dataflow with a custom grace duration
@@ -286,33 +297,37 @@ impl DynamicNodeDispatcher {
         &mut self,
         grace_duration: std::time::Duration,
     ) -> BridgeResult<()> {
-        // Disconnect bridges first
-        self.disconnect_all()?;
-
-        // Stop the dataflow with grace duration
-        let mut controller = self.controller.write();
-        controller.stop_with_grace_duration(grace_duration)?;
-
-        Ok(())
+        let disconnect_result = self.disconnect_all();
+        let stop_result = self
+            .controller
+            .write()
+            .stop_with_grace_duration(grace_duration);
+        combine_shutdown_results(disconnect_result, stop_result)
     }
 
     /// Force stop the dataflow immediately (0s grace period)
     ///
     /// This will immediately kill all nodes without waiting for graceful shutdown.
     pub fn force_stop(&mut self) -> BridgeResult<()> {
-        // Disconnect bridges first
-        self.disconnect_all()?;
-
-        // Force stop the dataflow
-        let mut controller = self.controller.write();
-        controller.force_stop()?;
-
-        Ok(())
+        let disconnect_result = self.disconnect_all();
+        let stop_result = self.controller.write().force_stop();
+        combine_shutdown_results(disconnect_result, stop_result)
     }
 
     /// Check if the dispatcher is running
     pub fn is_running(&self) -> bool {
         self.controller.read().state().is_running()
+    }
+}
+
+fn combine_shutdown_results(
+    disconnect_result: BridgeResult<()>,
+    stop_result: BridgeResult<()>,
+) -> BridgeResult<()> {
+    match (disconnect_result, stop_result) {
+        (_, Err(stop_error)) => Err(stop_error),
+        (Err(disconnect_error), Ok(())) => Err(disconnect_error),
+        (Ok(()), Ok(())) => Ok(()),
     }
 }
 
@@ -365,5 +380,76 @@ impl DispatcherBuilder {
 impl Default for DispatcherBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod retry_tests {
+    use super::*;
+    use crate::data::DoraData;
+
+    struct RetryBridge {
+        state: BridgeState,
+        connect_calls: usize,
+        disconnect_calls: usize,
+    }
+
+    impl DoraBridge for RetryBridge {
+        fn node_id(&self) -> &str {
+            "retry-node"
+        }
+
+        fn state(&self) -> BridgeState {
+            self.state
+        }
+
+        fn connect(&mut self) -> BridgeResult<()> {
+            self.connect_calls += 1;
+            self.state = BridgeState::Connected;
+            Ok(())
+        }
+
+        fn disconnect(&mut self) -> BridgeResult<()> {
+            self.disconnect_calls += 1;
+            self.state = BridgeState::Disconnected;
+            Ok(())
+        }
+
+        fn send(&self, _output_id: &str, _data: DoraData) -> BridgeResult<()> {
+            Ok(())
+        }
+
+        fn expected_inputs(&self) -> Vec<String> {
+            Vec::new()
+        }
+
+        fn expected_outputs(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn retry_keeps_a_bridge_that_already_connected() {
+        let mut bridge = RetryBridge {
+            state: BridgeState::Connected,
+            connect_calls: 1,
+            disconnect_calls: 0,
+        };
+        connect_bridge(&mut bridge).unwrap();
+        assert_eq!(bridge.connect_calls, 1);
+        assert_eq!(bridge.disconnect_calls, 0);
+    }
+
+    #[test]
+    fn retry_cleans_up_a_failed_worker_before_reconnecting() {
+        let mut bridge = RetryBridge {
+            state: BridgeState::Error,
+            connect_calls: 0,
+            disconnect_calls: 0,
+        };
+        connect_bridge(&mut bridge).unwrap();
+        assert_eq!(bridge.state, BridgeState::Connected);
+        assert_eq!(bridge.connect_calls, 1);
+        assert_eq!(bridge.disconnect_calls, 1);
     }
 }
