@@ -2,6 +2,7 @@ use crate::{
     dataflow::{render_translation_dataflow, RenderOptions},
     preferences::{self, AppPreferences},
     runtime::{RuntimeEvent, TranslationRuntime},
+    usage::{self, UsageSnapshot, UsageTracker},
     Args,
 };
 use cpal::traits::{DeviceTrait, HostTrait};
@@ -12,6 +13,7 @@ use std::{
     fs::{self, OpenOptions},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
+    sync::Arc,
     thread,
     time::Duration,
 };
@@ -168,6 +170,7 @@ struct AppState {
     voice_preview_process: Mutex<Option<Child>>,
     model_download_process: Mutex<Option<(String, Child)>>,
     subtitle_preview_visible: Mutex<bool>,
+    usage: Arc<UsageTracker>,
 }
 
 impl AppState {
@@ -175,6 +178,7 @@ impl AppState {
         let preferences = preferences::load();
         let settings = TranslationSettings::from(&preferences);
         let runtime = TranslationRuntime::new();
+        let usage = UsageTracker::load(preferences::preferences_dir().join("usage.json"));
         let state = Self {
             preferences: Mutex::new(preferences),
             runtime,
@@ -183,6 +187,7 @@ impl AppState {
             voice_preview_process: Mutex::new(None),
             model_download_process: Mutex::new(None),
             subtitle_preview_visible: Mutex::new(true),
+            usage,
         };
         state.sync_shared_state();
         state.show_subtitle_preview(&settings);
@@ -350,11 +355,21 @@ impl AppState {
                     state.message = format!("Local translation connected · {id}");
                 }
                 RuntimeEvent::Stopped => {
+                    if state.running {
+                        if let Err(error) = self.usage.stop() {
+                            log::error!("Could not stop usage timer: {error}");
+                        }
+                    }
                     state.running = false;
                     state.status = "idle".into();
                     state.message = "Translation stopped".into();
                 }
                 RuntimeEvent::Error(message) => {
+                    if state.running {
+                        if let Err(error) = self.usage.stop() {
+                            log::error!("Could not stop usage timer after runtime error: {error}");
+                        }
+                    }
                     state.running = false;
                     state.status = "error".into();
                     state.message = message;
@@ -416,9 +431,17 @@ impl AppState {
             .and_then(read_model_download_state)
             .unwrap_or_else(|| {
                 if core_models_ready() {
-                    (1.0, "Ready".into(), "Core translation models are installed".into())
+                    (
+                        1.0,
+                        "Ready".into(),
+                        "Core translation models are installed".into(),
+                    )
                 } else {
-                    (0.0, "Models required".into(), "Download models to start translating".into())
+                    (
+                        0.0,
+                        "Models required".into(),
+                        "Download models to start translating".into(),
+                    )
                 }
             });
         ModelStatus {
@@ -453,8 +476,7 @@ fn core_models_ready() -> bool {
 }
 
 fn speech_model_ready() -> bool {
-    let model = model_root()
-        .join("qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit");
+    let model = model_root().join("qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit");
     model.join("config.json").is_file()
         && model.join("model.safetensors").is_file()
         && model.join("speech_tokenizer/config.json").is_file()
@@ -538,7 +560,11 @@ fn start_model_download(
 
     let mut running = state.model_download_process.lock();
     if let Some((_, child)) = running.as_mut() {
-        if child.try_wait().map_err(|error| error.to_string())?.is_none() {
+        if child
+            .try_wait()
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
             return Err("A model download is already running".into());
         }
         *running = None;
@@ -561,10 +587,9 @@ fn start_model_download(
     let child = Command::new(downloader)
         .env("HEN_LOCAL_MODEL_COMPONENT", component)
         .env("HEN_LOCAL_BOOTSTRAP_STATE_PATH", &state_path)
-        .stdout(Stdio::from(
-            log.try_clone()
-                .map_err(|error| format!("Could not open model log: {error}"))?,
-        ))
+        .stdout(Stdio::from(log.try_clone().map_err(|error| {
+            format!("Could not open model log: {error}")
+        })?))
         .stderr(Stdio::from(log))
         .spawn()
         .map_err(|error| format!("Could not start model download: {error}"))?;
@@ -605,7 +630,9 @@ fn start_translation(
         return Err("Download the core translation models before starting live translation".into());
     }
     if settings.spoken_translation_enabled && !speech_model_ready() {
-        return Err("Download the spoken-translation model before enabling spoken translation".into());
+        return Err(
+            "Download the spoken-translation model before enabling spoken translation".into(),
+        );
     }
     {
         let mut preferences = state.preferences.lock();
@@ -635,6 +662,10 @@ fn start_translation(
     shared.translation_overlay_active.set(true);
     shared.translation_overlay_status.set("warming".into());
     state.runtime.start(dataflow)?;
+    if let Err(error) = state.usage.start() {
+        let _ = state.runtime.stop();
+        return Err(error);
+    }
     apply_overlay_window(&app, &settings, false)?;
     if let Some(window) = app.get_webview_window("overlay") {
         window.show().map_err(|error| error.to_string())?;
@@ -653,6 +684,7 @@ fn start_translation(
 fn stop_translation(state: State<'_, AppState>) -> Result<RuntimeState, String> {
     state.save_transcript_if_needed()?;
     state.runtime.stop()?;
+    state.usage.stop()?;
     let shared = state.runtime.shared_state();
     shared.translation.set(None);
     shared.translation_window_visible.set(true);
@@ -667,6 +699,19 @@ fn stop_translation(state: State<'_, AppState>) -> Result<RuntimeState, String> 
     };
     *state.runtime_state.lock() = next.clone();
     Ok(next)
+}
+
+#[tauri::command]
+fn get_usage(state: State<'_, AppState>) -> UsageSnapshot {
+    state.usage.snapshot()
+}
+
+#[tauri::command]
+fn set_usage_comparison_rate(
+    state: State<'_, AppState>,
+    rate: f64,
+) -> Result<UsageSnapshot, String> {
+    state.usage.set_comparison_rate(rate)
 }
 
 #[tauri::command]
@@ -975,6 +1020,10 @@ pub fn run(args: Args) {
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
             app.manage(AppState::new(resource_dir));
+            {
+                let state = app.state::<AppState>();
+                usage::start_checkpoint_loop(state.usage.clone());
+            }
             create_overlay(app)?;
             let initial_settings = {
                 let state = app.state::<AppState>();
@@ -991,6 +1040,7 @@ pub fn run(args: Args) {
                     .runtime
                     .start(dataflow.into())
                     .map_err(|error| anyhow::anyhow!(error))?;
+                state.usage.start().map_err(anyhow::Error::msg)?;
             }
             start_event_bridge(app.handle().clone());
             Ok(())
@@ -1002,6 +1052,8 @@ pub fn run(args: Args) {
             update_settings,
             start_translation,
             stop_translation,
+            get_usage,
+            set_usage_comparison_rate,
             get_overlay_state,
             open_transcript_history,
             toggle_subtitle_preview,
@@ -1019,6 +1071,14 @@ pub fn run(args: Args) {
                 };
                 if let Err(error) = apply_native_identity(app, &settings) {
                     log::error!("Could not apply native application identity: {error}");
+                }
+            }
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                let state = app.state::<AppState>();
+                if state.usage.snapshot().running {
+                    if let Err(error) = state.usage.stop() {
+                        log::error!("Could not save usage before exit: {error}");
+                    }
                 }
             }
         });

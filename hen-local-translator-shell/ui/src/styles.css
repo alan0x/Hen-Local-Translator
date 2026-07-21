@@ -150,7 +150,7 @@ select:disabled, button:disabled { cursor: not-allowed; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.74); backdrop-filter: blur(4px); }
 .modal { position: relative; inset: auto; margin: 0; padding: 0; width: min(580px, calc(100vw - 48px)); border: 1.5px solid var(--ink); background: white; color: var(--ink); box-shadow: 10px 10px 0 rgba(16,17,18,.13); }
-.modal.small-modal { width: min(450px, calc(100vw - 48px)); }
+.modal.small-modal { width: min(450px, calc(100vw - 48px)); max-height: calc(100vh - 36px); overflow: auto; }
 .modal header { height: 58px; border-bottom: 1px solid var(--ink); display: flex; align-items: center; justify-content: space-between; padding-left: 18px; }
 .modal header > div { display: flex; align-items: center; gap: 14px; }
 .modal header span { font-size: 11px; font-weight: 760; color: var(--accent-text); letter-spacing: .1em; }
@@ -208,6 +208,19 @@ select:disabled, button:disabled { cursor: not-allowed; }
 .update-settings p { grid-column: 1 / -1; margin: 0; }
 .update-settings button { min-width: 118px; height: 34px; border: 1px solid var(--ink); background: #fff; font-size: 10px; font-weight: 760; }
 .update-settings button:not(:disabled):hover { background: var(--ink); color: #fff; }
+.usage-settings { padding: 14px 18px; border-top: 1px solid var(--line); display: grid; gap: 12px; }
+.usage-heading { display: flex; justify-content: space-between; gap: 14px; align-items: end; }
+.usage-heading > div { display: grid; gap: 4px; }
+.usage-heading strong, .usage-grid strong { font-size: 11px; letter-spacing: .04em; }
+.usage-heading small, .usage-grid small, .usage-settings p { color: var(--muted); font-size: 9px; }
+.usage-heading > b { font-size: 18px; letter-spacing: -.03em; }
+.usage-grid { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); }
+.usage-grid > div { padding: 9px 10px; display: grid; gap: 5px; border-right: 1px solid var(--line); }
+.usage-grid > div:last-child { border-right: 0; }
+.rate-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; font-weight: 680; }
+.rate-setting input { width: 52px; height: 28px; padding: 0 5px; border: 1px solid var(--ink); text-align: right; }
+.usage-settings p { margin: 0; line-height: 1.45; }
+.session-timer { color: var(--ink); font-variant-numeric: tabular-nums; }
 .update-error { color: #bd241d !important; font-weight: 700; }
 .update-modal { width: min(560px, calc(100vw - 48px)); }
 .update-content { padding: 22px 22px 16px; }

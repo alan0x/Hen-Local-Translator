@@ -25,8 +25,9 @@ Status notation:
 
 ## Current focus
 
-- 🔄 **In progress:** Build the account, subscription, and entitlement backend
-  foundation while the signed updater receives its first tagged end-to-end test.
+- 🔄 **In progress:** Deploy and connect the account/licensing foundation once
+  Supabase, Stripe, login-provider, Apple signing, and voice-asset credentials
+  are supplied; meanwhile complete all locally testable release work.
 
 Apple signing/notarization remains a production-release blocker. Once the paid
 Developer Program membership is active, configure the five required GitHub
@@ -65,9 +66,9 @@ Not included at launch:
 - [x] The current Tauri application has a production updater integration.
 - [x] The repository has an automated GitHub release workflow.
 - [ ] Release artifacts are Developer ID signed and Apple notarized.
-- [ ] Update artifacts are cryptographically signed and verified by the app.
+- [x] Update artifacts are cryptographically signed and verified by the app.
 - [ ] Accounts, billing, subscriptions, and device licensing exist.
-- [ ] Local session usage and savings tracking exist.
+- [x] Local session usage and value-estimate tracking exist.
 
 ## Phase 1: Release version control and macOS distribution
 
@@ -107,7 +108,7 @@ Goal: one Git tag produces a reproducible, trusted macOS release.
   notes will be uploaded to a draft GitHub Release after the workflow is
   verified with its first test tag.
 - [ ] Enable immutable releases after the draft release flow is verified.
-- [ ] Add a documented manual recovery/re-release procedure.
+- [x] Add a documented manual recovery/re-release procedure.
 
 ### Required credentials and external setup
 
@@ -181,18 +182,20 @@ format.
 
 ### Tasks
 
-- [ ] Create development and production backend environments.
-- [ ] Implement account creation, sign-in, sign-out, and account recovery.
-- [ ] Configure one `$49/month` Stripe price.
-- [ ] Implement Stripe Checkout.
-- [ ] Implement the Stripe Customer Portal.
-- [ ] Verify webhook signatures and process events idempotently.
-- [ ] Store only the billing fields required for access decisions.
-- [ ] Support `trialing`, `active`, `past_due`, `canceled`, and `unpaid`.
-- [ ] Preserve access through `current_period_end` after cancellation.
-- [ ] Define and implement the payment-failure grace period.
-- [ ] Add a daily billing reconciliation job for missed webhook recovery.
-- [ ] Add structured security/audit logs without transcript or audio content.
+- [ ] ⛔ Create development and production backend environments (requires the
+  production Supabase organization/project access).
+- [ ] ⛔ Implement end-user account creation, sign-in, sign-out, and recovery
+  (server schema exists; login provider and public account URL are required).
+- [ ] ⛔ Configure one `$49/month` Stripe price (requires the Stripe account).
+- [x] Implement Stripe Checkout.
+- [x] Implement the Stripe Customer Portal.
+- [x] Verify webhook signatures and process events idempotently.
+- [x] Store only the billing fields required for access decisions.
+- [x] Support `trialing`, `active`, `past_due`, `canceled`, and `unpaid`.
+- [x] Preserve access through `current_period_end` after cancellation.
+- [x] Define and implement a fixed three-day payment-failure grace period.
+- [x] Add a daily billing reconciliation function for missed webhook recovery.
+- [x] Add structured security/audit logs without transcript or audio content.
 
 ### Acceptance criteria
 
@@ -220,8 +223,8 @@ Goal: one account works on two computers with reasonable offline support.
 - [ ] Implement browser-based desktop authentication and secure callback.
 - [ ] Generate and store a per-device private key in macOS Keychain.
 - [ ] Register device public keys and friendly names with the backend.
-- [ ] Enforce a maximum of two active devices in a database transaction.
-- [ ] Issue signed, device-bound seven-day license leases.
+- [x] Enforce a maximum of two active devices in a database transaction.
+- [x] Issue signed, device-bound seven-day license leases on the backend.
 - [ ] Verify leases locally using an embedded public key.
 - [ ] Refresh leases daily when the network is available.
 - [ ] Add subscription status to the desktop account/settings page.
@@ -247,19 +250,20 @@ Goal: show product value without metering or uploading customer content.
 
 ### Tasks
 
-- [ ] Define a translation session as time when the translation pipeline is
+- [x] Define a translation session as time when the translation pipeline is
   running.
-- [ ] Pause the timer when translation is paused or stopped.
-- [ ] Track current-session, monthly, and lifetime translation duration.
-- [ ] Track the number of completed sessions.
-- [ ] Persist progress every 30 seconds and at clean shutdown/session end.
-- [ ] Recover sensibly after an app crash.
-- [ ] Add a session timer to the live translation UI.
-- [ ] Add a usage/value section to Settings.
-- [ ] Add a transparent, configurable cloud-equivalent comparison rate.
-- [ ] Label calculated value as an estimate, not guaranteed savings.
-- [ ] State clearly that audio remains local and usage is not used for billing.
-- [ ] Keep all detailed usage local by default.
+- [x] Pause the timer when translation is stopped or fails.
+- [x] Track current-session, monthly, and lifetime translation duration.
+- [x] Track the number of completed sessions.
+- [x] Persist progress every 30 seconds and at clean shutdown/session end.
+- [x] Recover sensibly after an app crash with at most the uncheckpointed window
+  omitted rather than inventing elapsed time.
+- [x] Add a session timer to the live translation UI.
+- [x] Add a usage/value section to Settings.
+- [x] Add a transparent, configurable cloud-equivalent comparison rate.
+- [x] Label calculated value as an estimate, not guaranteed savings.
+- [x] State clearly that audio remains local and usage is not used for billing.
+- [x] Keep all detailed usage local by default.
 
 ### Acceptance criteria
 
@@ -284,10 +288,12 @@ Goal: verify full customer journeys and failure recovery before charging users.
 - [ ] Update from older supported app versions.
 - [ ] Recover from interrupted or corrupted update downloads.
 - [ ] Complete a commercial license audit for models, voices, libraries, and
-  bundled assets.
-- [ ] Document the implications of the existing Apache-2.0 source license.
+  bundled assets. Model licenses are verified; ownership/consent records for the
+  eight bundled preview recordings are still a release blocker.
+- [x] Document the implications of the existing Apache-2.0 source license.
 - [ ] Publish privacy, terms, cancellation, and refund policies.
-- [ ] Confirm that no audio or transcript content reaches licensing services.
+- [x] Confirm in the backend schema/API design that no audio, transcript, or
+  detailed local usage content reaches licensing services.
 
 ## Phase 7: Closed paid beta and production launch
 
@@ -323,9 +329,27 @@ Goal: validate the single subscription before introducing more pricing.
   with Tauri signatures plus Apple signing/notarization.
 - 2026-07-20: Complete secure releases and updates before enforcing paid
   subscriptions.
+- 2026-07-21: Ship a roughly 75 MB application package and download about 4.2 GB
+  of core models after first launch; download the optional 3.1 GB spoken-
+  translation model only when requested.
+- 2026-07-21: Begin the seven-day trial on first device activation, not account
+  creation, and use a fixed three-day payment-failure grace period.
 
 ## Progress log
 
+- 2026-07-21: Added the Supabase/Stripe account foundation: minimal product
+  records, activation-based trial, Checkout, Customer Portal, verified and
+  idempotent webhooks, cancellation/paid-through handling, fixed payment grace,
+  daily reconciliation, transactional two-device enforcement, audit events,
+  and signed seven-day leases. Edge Functions pass Deno type-checking and five
+  entitlement tests; deployment is blocked on external service accounts.
+- 2026-07-21: Added local current-session, monthly, lifetime, and completed-
+  session statistics with 30-second crash-safe checkpoints, a live timer,
+  configurable comparison rate, and clearly labeled local-only value estimate.
+- 2026-07-21: Added launch drafts for privacy, terms, cancellation/refunds,
+  support/license recovery, and release recovery. Verified all three downloaded
+  MLX model cards declare Apache-2.0; preview-recording provenance remains a
+  commercial-release blocker.
 - 2026-07-21: Replaced the hand-assembled macOS app wrapper that produced blank
   WebViews in the internal DMG with Tauri's official application bundler. The
   rebuilt app, DMG, signed updater archive, embedded local executables, numeric

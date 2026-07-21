@@ -53,6 +53,9 @@ setup.py
 .venv-moxin/
 .nix-moxin/
 /internal/
+/supabase/.env
+/supabase/.env.local
+/supabase/.temp/
 
 # Memory sampling output (analysis artifacts, never committed)
 /scripts/diagnostics/memsample-*.csv

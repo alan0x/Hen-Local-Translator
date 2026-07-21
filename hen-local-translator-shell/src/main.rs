@@ -6,6 +6,7 @@ mod app;
 mod dataflow;
 mod preferences;
 mod runtime;
+mod usage;
 
 use clap::Parser;
 

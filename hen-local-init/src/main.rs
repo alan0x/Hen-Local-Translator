@@ -1225,13 +1225,10 @@ fn resolve_config() -> Config {
         qwen3_tts_dir: env::var("QWEN3_TTS_CUSTOMVOICE_MODEL_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
-                home.join(
-                    ".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
-                )
+                home.join(".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit")
             }),
-        qwen3_tts_repo: env::var("QWEN3_TTS_CUSTOMVOICE_REPO").unwrap_or_else(|_| {
-            "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit".to_string()
-        }),
+        qwen3_tts_repo: env::var("QWEN3_TTS_CUSTOMVOICE_REPO")
+            .unwrap_or_else(|_| "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit".to_string()),
     }
 }
 

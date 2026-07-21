@@ -4,6 +4,7 @@
   import {
     getSettings,
     getModelStatus,
+    getUsage,
     checkForUpdates,
     downloadUpdate,
     installDownloadedUpdate,
@@ -12,6 +13,7 @@
     previewSpokenVoice,
     startTranslation,
     startModelDownload,
+    setUsageComparisonRate,
     stopSpokenVoicePreview,
     stopTranslation,
     toggleSubtitlePreview,
@@ -20,6 +22,7 @@
     type RuntimeState,
     type ModelStatus,
     type UpdateStatus,
+    type UsageSnapshot,
     type SettingsPayload,
     type TranslationSettings
   } from './lib/api';
@@ -68,6 +71,9 @@
   let updateError = '';
   let updateDialogOpen = false;
   let updateDownloaded = false;
+  let usage: UsageSnapshot | null = null;
+  let usageTimer: number | null = null;
+  let comparisonRateDraft = '1.50';
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
@@ -246,6 +252,54 @@
     return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
   }
 
+  function formatDuration(seconds: number): string {
+    const rounded = Math.max(0, Math.floor(seconds));
+    const hours = Math.floor(rounded / 3600);
+    const minutes = Math.floor((rounded % 3600) / 60);
+    const remainder = rounded % 60;
+    return hours > 0
+      ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+      : `${minutes}:${String(remainder).padStart(2, '0')}`;
+  }
+
+  async function refreshUsage(): Promise<void> {
+    try {
+      const latest = await getUsage();
+      if (document.activeElement?.id === 'comparison-rate') {
+        const draftRate = Number(comparisonRateDraft);
+        usage = Number.isFinite(draftRate) && draftRate >= 0 && draftRate <= 100
+          ? { ...latest, comparisonRatePerMinute: draftRate, estimatedValue: latest.lifetimeSeconds / 60 * draftRate }
+          : latest;
+      } else {
+        usage = latest;
+        comparisonRateDraft = latest.comparisonRatePerMinute.toFixed(2);
+      }
+    } catch (error) {
+      errorMessage = String(error);
+    }
+  }
+
+  async function saveComparisonRate(): Promise<void> {
+    const rate = Number(comparisonRateDraft);
+    if (!Number.isFinite(rate)) return;
+    try {
+      usage = await setUsageComparisonRate(rate);
+      comparisonRateDraft = usage.comparisonRatePerMinute.toFixed(2);
+    } catch (error) {
+      errorMessage = String(error);
+    }
+  }
+
+  function previewComparisonRate(): void {
+    const rate = Number(comparisonRateDraft);
+    if (!usage || !Number.isFinite(rate) || rate < 0 || rate > 100) return;
+    usage = {
+      ...usage,
+      comparisonRatePerMinute: rate,
+      estimatedValue: usage.lifetimeSeconds / 60 * rate
+    };
+  }
+
   async function refreshModelStatus(): Promise<void> {
     try {
       modelStatus = await getModelStatus();
@@ -345,6 +399,8 @@
     });
     void listenRuntime(applyRuntime).then((cleanup) => { unlisten = cleanup; });
     void refreshModelStatus();
+    void refreshUsage();
+    usageTimer = window.setInterval(() => void refreshUsage(), 1000);
     const lastUpdateCheck = Number(localStorage.getItem('hen-local-last-update-check') ?? '0');
     if (Date.now() - lastUpdateCheck > 24 * 60 * 60 * 1000) {
       window.setTimeout(() => void checkUpdates(false), 2500);
@@ -352,6 +408,7 @@
     return () => {
       clearPreviewTimer();
       if (modelTimer !== null) window.clearInterval(modelTimer);
+      if (usageTimer !== null) window.clearInterval(usageTimer);
       void stopSpokenVoicePreview();
       unlisten();
     };
@@ -524,6 +581,7 @@
         <span>{languageName(settings.sourceLanguage)} → {languageName(settings.targetLanguage)}</span>
         <span>{deviceName(settings.inputDevice)}</span>
         {#if errorMessage}<strong class="error">{errorMessage}</strong>{:else}<span>{runtimeDisplayMessage()}</span>{/if}
+        {#if usage && running}<strong class="session-timer">{formatDuration(usage.currentSessionSeconds)}</strong>{/if}
       </div>
       <button class:running class="launch-button" disabled={busy} on:click={toggleTranslation}>
         <span>{running ? '■' : '▶'}</span>
@@ -596,6 +654,24 @@
           {#if updateStatus && !updateStatus.available && !updateBusy}<p>{tr('已经是最新版本。', 'You are up to date.')}</p>{/if}
           {#if updateError}<p class="update-error">{updateError}</p>{/if}
         </section>
+        {#if usage}
+          <section class="usage-settings">
+            <div class="usage-heading">
+              <div><strong>{tr('本机使用统计', 'LOCAL USAGE')}</strong><small>{tr('只保存在这台电脑，不影响订阅费用', 'STORED ONLY ON THIS MAC · NEVER USED FOR BILLING')}</small></div>
+              <b>{formatDuration(usage.lifetimeSeconds)}</b>
+            </div>
+            <div class="usage-grid">
+              <div><small>{tr('本月', 'THIS MONTH')}</small><strong>{formatDuration(usage.monthlySeconds)}</strong></div>
+              <div><small>{tr('完成会话', 'SESSIONS')}</small><strong>{usage.completedSessions}</strong></div>
+              <div><small>{tr('估算价值', 'ESTIMATED VALUE')}</small><strong>${usage.estimatedValue.toFixed(0)}</strong></div>
+            </div>
+            <label class="rate-setting" for="comparison-rate">
+              <span>{tr('云端同类服务比较价', 'CLOUD COMPARISON RATE')}</span>
+              <span>$ <input id="comparison-rate" inputmode="decimal" bind:value={comparisonRateDraft} on:input={previewComparisonRate} on:change={saveComparisonRate} on:blur={saveComparisonRate} /> / {tr('分钟', 'MIN')}</span>
+            </label>
+            <p>{tr('估算公式：累计翻译分钟 × 比较价。这里只是方便了解本地处理的价值，不代表保证节省金额。', 'Estimate = lifetime translation minutes × comparison rate. This is a value illustration, not guaranteed savings.')}</p>
+          </section>
+        {/if}
         <p class="privacy-note">{tr('语音、字幕和偏好设置均保留在本机。', 'Audio, subtitles, and preferences remain on this device.')}</p>
       </dialog>
     </div>

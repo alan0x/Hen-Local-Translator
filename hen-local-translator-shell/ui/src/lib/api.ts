@@ -67,6 +67,17 @@ export interface UpdateStatus {
   installed: boolean;
 }
 
+export interface UsageSnapshot {
+  currentSessionSeconds: number;
+  monthlySeconds: number;
+  lifetimeSeconds: number;
+  completedSessions: number;
+  comparisonRatePerMinute: number;
+  estimatedValue: number;
+  running: boolean;
+  monthKey: string;
+}
+
 let pendingUpdate: Update | null = null;
 
 export interface Sentence {
@@ -225,6 +236,26 @@ export async function installDownloadedUpdate(restartNow: boolean): Promise<void
 
 export async function updateSettings(settings: TranslationSettings): Promise<void> {
   if (isTauri()) await invoke('update_settings', { settings });
+}
+
+export async function getUsage(): Promise<UsageSnapshot> {
+  if (isTauri()) return invoke<UsageSnapshot>('get_usage');
+  return {
+    currentSessionSeconds: 0,
+    monthlySeconds: 4_380,
+    lifetimeSeconds: 18_240,
+    completedSessions: 12,
+    comparisonRatePerMinute: 1.5,
+    estimatedValue: 456,
+    running: false,
+    monthKey: new Date().toISOString().slice(0, 7)
+  };
+}
+
+export async function setUsageComparisonRate(rate: number): Promise<UsageSnapshot> {
+  if (isTauri()) return invoke<UsageSnapshot>('set_usage_comparison_rate', { rate });
+  const usage = await getUsage();
+  return { ...usage, comparisonRatePerMinute: rate, estimatedValue: usage.lifetimeSeconds / 60 * rate };
 }
 
 export async function startTranslation(settings: TranslationSettings): Promise<RuntimeState> {

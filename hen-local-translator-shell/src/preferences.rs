@@ -77,7 +77,7 @@ impl Default for AppPreferences {
     }
 }
 
-fn preferences_dir() -> PathBuf {
+pub fn preferences_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Hen Local Translator")
