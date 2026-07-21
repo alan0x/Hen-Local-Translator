@@ -204,6 +204,11 @@ select:disabled, button:disabled { cursor: not-allowed; }
 .account-warning { padding: 7px 8px; background: #fff4dc; color: #6e4900; font-weight: 680; }
 
 .model-settings { border-top: 1px solid var(--line); }
+.voice-lab-setting { padding: 13px 18px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; }
+.voice-lab-setting > div { display: grid; gap: 4px; }
+.voice-lab-setting strong { font-size: 11px; letter-spacing: .04em; }
+.voice-lab-setting small { color: var(--muted); font-size: 10px; }
+.voice-lab-setting button { min-width: 118px; height: 34px; border: 1px solid var(--ink); background: var(--accent); color: var(--action-text); font-size: 10px; font-weight: 800; }
 .model-row { min-height: 58px; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #dedfe1; }
 .model-row > div { min-width: 0; display: grid; gap: 4px; }
 .model-row strong { font-size: 11px; letter-spacing: .04em; }

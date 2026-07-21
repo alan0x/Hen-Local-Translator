@@ -36,7 +36,12 @@ if anything is wrong.
 
 ## 4. Apple voice previews and live speech
 
-1. Test exactly **Apple 音色 1–5** for English and Chinese targets.
+0. Confirm **译文播报** is off on a fresh/default preference file. Open
+   Settings → **Apple 音色实验室**, filter Chinese and English,试听候选音色,
+   star favorites, and copy the shortlist.
+1. For an English target, test exactly **Siri Voice 1–5** downloaded from
+   macOS Live Speech settings. For a Chinese target, test **Apple 音色 1–5** and
+   use the Voice Lab to shortlist better Chinese voices.
 2. Confirm every preview speaks the new Hen Local sample, not “这是一个充满
    希望的时代” and not “欢迎来到 Moxie Voice”.
 3. Start translation with speech enabled and confirm every completed translation

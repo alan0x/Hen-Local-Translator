@@ -119,6 +119,12 @@ export interface OverlayState {
 
 export type AccentTheme = 'neon-blue' | 'neon-orange' | 'neon-pink' | 'neon-green';
 
+export interface AppleSystemVoice {
+  name: string;
+  locale: string;
+  sample: string;
+}
+
 export const previewSettings: SettingsPayload = {
   settings: {
     appLanguage: 'zh',
@@ -397,6 +403,18 @@ export async function previewSpokenVoice(voice: string, language: string): Promi
 
 export async function stopSpokenVoicePreview(): Promise<void> {
   if (isTauri()) await invoke('stop_spoken_voice_preview');
+}
+
+export async function listAppleVoices(): Promise<AppleSystemVoice[]> {
+  return isTauri() ? invoke<AppleSystemVoice[]>('list_apple_voices') : [];
+}
+
+export async function previewAppleVoice(name: string, locale: string): Promise<void> {
+  if (isTauri()) await invoke('preview_apple_voice', { name, locale });
+}
+
+export async function openVoiceLab(): Promise<void> {
+  if (isTauri()) await invoke('open_voice_lab');
 }
 
 export async function startWindowDrag(): Promise<void> {

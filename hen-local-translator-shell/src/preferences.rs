@@ -155,4 +155,9 @@ mod tests {
             assert_eq!(preferences.accent_theme, theme);
         }
     }
+
+    #[test]
+    fn spoken_translation_is_off_by_default() {
+        assert!(!AppPreferences::default().experimental_spoken_translation_enabled);
+    }
 }

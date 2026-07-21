@@ -849,6 +849,40 @@ fn stop_spoken_voice_preview(state: State<'_, AppState>) {
     stop_preview_process(&state);
 }
 
+#[tauri::command]
+fn list_apple_voices() -> Vec<apple_speech::SystemVoice> {
+    apple_speech::available_voices()
+}
+
+#[tauri::command]
+fn preview_apple_voice(
+    state: State<'_, AppState>,
+    name: String,
+    locale: String,
+) -> Result<(), String> {
+    stop_preview_process(&state);
+    let child = apple_speech::preview_named(&name, &locale)?;
+    *state.voice_preview_process.lock() = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_voice_lab(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("voice-lab") {
+        window.show().map_err(|error| error.to_string())?;
+        window.set_focus().map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, "voice-lab", WebviewUrl::App("voice-lab.html".into()))
+        .title("Apple Voice Lab")
+        .inner_size(1080.0, 760.0)
+        .min_inner_size(760.0, 560.0)
+        .center()
+        .build()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 fn input_devices() -> Vec<String> {
     let mut devices = vec!["__system_audio__".into(), "__default_microphone__".into()];
     if let Ok(discovered) = cpal::default_host().input_devices() {
@@ -1102,7 +1136,10 @@ pub fn run(args: Args) {
             open_transcript_history,
             toggle_subtitle_preview,
             preview_spoken_voice,
-            stop_spoken_voice_preview
+            stop_spoken_voice_preview,
+            list_apple_voices,
+            preview_apple_voice,
+            open_voice_lab
         ])
         .build(tauri::generate_context!())
         .expect("failed to build Hen Local Translator")

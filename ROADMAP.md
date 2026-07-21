@@ -345,6 +345,10 @@ Goal: validate the single subscription before introducing more pricing.
   private keys in macOS Keychain; ship only the license verification public key.
 ## Progress log
 
+- 2026-07-21: Added a separate Apple Voice Lab window that reads every system
+  voice currently available on the Mac, filters by language, previews a
+  consistent long-form sample, and saves/copies a Chinese and English favorite
+  shortlist. Fresh installations keep spoken translation off until enabled.
 - 2026-07-21: Replaced the optional Qwen TTS dataflow node, audio-player bridge,
   3.1 GB model download, packaged executable, and prerecorded previews with
   five local Apple system-voice choices. Spoken sentences are queued in order,
@@ -386,6 +390,10 @@ Goal: validate the single subscription before introducing more pricing.
 - 2026-07-21: Added local current-session, monthly, lifetime, and completed-
   session statistics with 30-second crash-safe checkpoints, a live timer,
   configurable comparison rate, and clearly labeled local-only value estimate.
+- 2026-07-21: Added a separate Apple Voice Lab that lists and previews every
+  system voice installed on the current Mac. Mapped English choices 1–5 to the
+  downloaded Siri Live Speech Voice 1–5; Chinese remains on installed Chinese
+  voices until the product shortlist is selected.
 - 2026-07-21: Added launch drafts for privacy, terms, cancellation/refunds,
   support/license recovery, and release recovery. Verified all three downloaded
   MLX model cards declare Apache-2.0; preview-recording provenance remains a

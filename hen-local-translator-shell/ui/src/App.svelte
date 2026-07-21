@@ -19,6 +19,7 @@
     installDownloadedUpdate,
     listenRuntime,
     openTranscriptHistory,
+    openVoiceLab,
     previewSpokenVoice,
     startTranslation,
     startModelDownload,
@@ -45,11 +46,11 @@
   ] as const;
   const fontSizes = ['16', '20', '24', '30', '36', '44', '52', '64', '80', '96', '120', '160'];
   const spokenVoices = [
-    { id: 'apple-voice-1', zh: 'Apple 音色 1', en: 'Apple Voice 1' },
-    { id: 'apple-voice-2', zh: 'Apple 音色 2', en: 'Apple Voice 2' },
-    { id: 'apple-voice-3', zh: 'Apple 音色 3', en: 'Apple Voice 3' },
-    { id: 'apple-voice-4', zh: 'Apple 音色 4', en: 'Apple Voice 4' },
-    { id: 'apple-voice-5', zh: 'Apple 音色 5', en: 'Apple Voice 5' }
+    { id: 'apple-voice-1', zh: 'Apple 音色 1', en: 'Apple Voice 1', siri: 'Siri Voice 1' },
+    { id: 'apple-voice-2', zh: 'Apple 音色 2', en: 'Apple Voice 2', siri: 'Siri Voice 2' },
+    { id: 'apple-voice-3', zh: 'Apple 音色 3', en: 'Apple Voice 3', siri: 'Siri Voice 3' },
+    { id: 'apple-voice-4', zh: 'Apple 音色 4', en: 'Apple Voice 4', siri: 'Siri Voice 4' },
+    { id: 'apple-voice-5', zh: 'Apple 音色 5', en: 'Apple Voice 5', siri: 'Siri Voice 5' }
   ] as const;
   const accentThemes: Array<{ id: AccentTheme; zh: string; en: string; color: string }> = [
     { id: 'neon-blue', zh: '电光蓝', en: 'BLUE', color: '#0003FE' },
@@ -116,6 +117,11 @@
 
   function voicesForTarget(_target: string) {
     return spokenVoices;
+  }
+
+  function spokenVoiceName(voice: (typeof spokenVoices)[number]): string {
+    if (settings?.targetLanguage === 'en') return voice.siri;
+    return isEnglish() ? voice.en : voice.zh;
   }
 
   function syncVoiceToTarget(): boolean {
@@ -654,7 +660,7 @@
             <div class="voice-picker-row">
               <select disabled={!settings.spokenTranslationEnabled} bind:value={settings.spokenTranslationVoice} on:change={selectSpokenVoice}>
                 {#each voicesForTarget(settings.targetLanguage) as voice}
-                  <option value={voice.id}>{isEnglish() ? voice.en : voice.zh}</option>
+                  <option value={voice.id}>{spokenVoiceName(voice)}</option>
                 {/each}
               </select>
               <button aria-label={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} title={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} class:playing={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1')} class="preview-button" type="button" disabled={!settings.spokenTranslationEnabled} on:click={playVoicePreview}>
@@ -781,6 +787,10 @@
             {/if}
           </section>
         {/if}
+        <section class="voice-lab-setting">
+          <div><strong>{tr('Apple 音色实验室', 'APPLE VOICE LAB')}</strong><small>{tr('试听这台 Mac 上全部可用音色，并收藏中英文候选', 'AUDITION EVERY VOICE AVAILABLE ON THIS MAC')}</small></div>
+          <button on:click={() => openVoiceLab()}>{tr('打开实验室', 'OPEN LAB')}</button>
+        </section>
         <section class="update-settings">
           <div>
             <strong>{tr('软件更新', 'SOFTWARE UPDATE')}</strong>
