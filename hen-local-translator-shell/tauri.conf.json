@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hen Local Live Translator",
+  "productName": "Hen Local Translator",
   "version": "1.2.0-beta.1",
   "identifier": "com.henlocal.translator",
   "build": {
@@ -51,7 +51,22 @@
       "../node-hub/dora-qwen3-tts-mlx/voices/baiyang/ref.wav",
       "../node-hub/dora-qwen3-tts-mlx/voices/yangyang/ref.wav",
       "../node-hub/dora-qwen3-tts-mlx/voices/maple/ref.wav",
-      "../node-hub/dora-qwen3-tts-mlx/voices/juniper/ref.wav"
-    ]
+      "../node-hub/dora-qwen3-tts-mlx/voices/juniper/ref.wav",
+      "../scripts/macos_preflight.sh",
+      "../scripts/macos_bootstrap.sh"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "bundleVersion": "1.2.0",
+      "infoPlist": "Info.plist"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaW5pIHB1YmxpYyBrZXk6IDI3MEIyREVFQzVERDU4NTIKUldSU1dOM0Y3aTBMSjgwbzZUMTR5d01jMHRQVVZhWlllY0g4c2V3Y0ZBSnd3QlRIQTJYeVdpa1gK",
+      "endpoints": [
+        "https://github.com/Hen-Local/Hen-Local-Translator/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 // Actual download sizes in bytes (measured 2026-04-17, `du -sk` × 1024)
 const BYTES_TRANSLATOR: u64 = 1_749_164_032; // Qwen3.5-2B-MLX-4bit
 const BYTES_ASR: u64 = 2_473_308_160; // Qwen3-ASR-1.7B-8bit
+const BYTES_TTS: u64 = 3_075_601_408; // Qwen3-TTS CustomVoice + speech tokenizer
 const TOTAL_BYTES: u64 = BYTES_TRANSLATOR + BYTES_ASR;
 const MODEL_COMPLETION_MARKER: &str = ".moxin-model-complete.json";
 const BOOTSTRAP_VERSION: u32 = 1;
@@ -77,6 +78,23 @@ const QWEN35_TRANSLATOR_MODEL_FILES: &[&str] = &[
     "tokenizer_config.json",
     "video_preprocessor_config.json",
     "vocab.json",
+];
+
+const QWEN3_TTS_MODEL_FILES: &[&str] = &[
+    ".gitattributes",
+    "README.md",
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "model.safetensors",
+    "model.safetensors.index.json",
+    "preprocessor_config.json",
+    "tokenizer_config.json",
+    "vocab.json",
+    "speech_tokenizer/config.json",
+    "speech_tokenizer/configuration.json",
+    "speech_tokenizer/model.safetensors",
+    "speech_tokenizer/preprocessor_config.json",
 ];
 
 fn write_state(
@@ -298,6 +316,13 @@ fn qwen35_translation_model_ready(dir: &Path) -> bool {
             || file_exists(&dir.join("model.safetensors.index.json")))
 }
 
+fn qwen3_tts_model_ready(dir: &Path) -> bool {
+    file_exists(&dir.join("config.json"))
+        && file_exists(&dir.join("model.safetensors"))
+        && file_exists(&dir.join("speech_tokenizer/config.json"))
+        && file_exists(&dir.join("speech_tokenizer/model.safetensors"))
+}
+
 // ── Model download providers ──────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -495,6 +520,7 @@ fn modelscope_manifest_files(repo_id: &str) -> Result<&'static [&'static str]> {
     match repo_id {
         "mlx-community/Qwen3-ASR-1.7B-8bit" => Ok(ASR_MODEL_FILES),
         "mlx-community/Qwen3.5-2B-MLX-4bit" => Ok(QWEN35_TRANSLATOR_MODEL_FILES),
+        "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit" => Ok(QWEN3_TTS_MODEL_FILES),
         _ => bail!("no built-in ModelScope manifest for {}", repo_id),
     }
 }
@@ -993,7 +1019,7 @@ mod tests {
         let headers = rx.recv().unwrap().join("");
         let headers_lower = headers.to_ascii_lowercase();
         assert!(
-            headers_lower.contains("user-agent: moxintranslator/hen-local-init"),
+            headers_lower.contains("user-agent: henlocaltranslator/hen-local-init"),
             "request headers did not contain the expected User-Agent:\n{headers}"
         );
     }
@@ -1163,6 +1189,8 @@ struct Config {
     asr_repo: String,
     qwen35_translator_dir: PathBuf,
     qwen35_translator_repo: String,
+    qwen3_tts_dir: PathBuf,
+    qwen3_tts_repo: String,
 }
 
 fn bootstrap_lock_path(cfg: &Config) -> PathBuf {
@@ -1194,6 +1222,16 @@ fn resolve_config() -> Config {
             .unwrap_or_else(|_| home.join(".OminiX/models/Qwen3.5-2B-MLX-4bit")),
         qwen35_translator_repo: env::var("QWEN35_TRANSLATOR_REPO")
             .unwrap_or_else(|_| "mlx-community/Qwen3.5-2B-MLX-4bit".to_string()),
+        qwen3_tts_dir: env::var("QWEN3_TTS_CUSTOMVOICE_MODEL_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                home.join(
+                    ".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit",
+                )
+            }),
+        qwen3_tts_repo: env::var("QWEN3_TTS_CUSTOMVOICE_REPO").unwrap_or_else(|_| {
+            "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit".to_string()
+        }),
     }
 }
 
@@ -1211,6 +1249,68 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>()
         .join(" -> ");
     eprintln!("[hen-local-init] model provider order: {}", provider_names);
+
+    if env::var("HEN_LOCAL_MODEL_COMPONENT")
+        .unwrap_or_else(|_| "core".to_string())
+        .eq_ignore_ascii_case("speech")
+    {
+        let ready = ensure_model_dir_ready(
+            &cfg.qwen3_tts_dir,
+            &cfg.qwen3_tts_repo,
+            qwen3_tts_model_ready,
+        )?;
+        if ready {
+            write_state(
+                state_file,
+                1,
+                1,
+                "Speech Model",
+                "Already present",
+                BYTES_TTS,
+                BYTES_TTS,
+            );
+            println!("[hen-local-init] speech model already ready");
+            return Ok(());
+        }
+
+        let client = build_http_client(Duration::from_secs(3600))?;
+        let mut bytes_done = 0;
+        write_state(
+            state_file,
+            0,
+            1,
+            "Speech Model",
+            "Preparing optional spoken translation",
+            0,
+            BYTES_TTS,
+        );
+        download_model_with_provider_fallback(
+            &client,
+            &providers,
+            &cfg.qwen3_tts_repo,
+            &cfg.qwen3_tts_dir,
+            state_file,
+            1,
+            1,
+            &mut bytes_done,
+            BYTES_TTS,
+            qwen3_tts_model_ready,
+            "Qwen3 TTS model incomplete after download",
+        )
+        .with_context(|| "Qwen3 TTS download failed")?;
+        write_model_completion_marker(&cfg.qwen3_tts_dir, &cfg.qwen3_tts_repo)?;
+        write_state(
+            state_file,
+            1,
+            1,
+            "Done",
+            "Speech model ready",
+            BYTES_TTS,
+            BYTES_TTS,
+        );
+        println!("[hen-local-init] speech model initialization complete");
+        return Ok(());
+    }
 
     // 2 potential downloads: Qwen3.5 translator and ASR.
     let total: usize = 2;

@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getVersion } from '@tauri-apps/api/app';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { check, type Update } from '@tauri-apps/plugin-updater';
 
 export type LanguageCode = 'zh' | 'en' | 'ja' | 'fr' | 'none';
 
@@ -39,6 +42,32 @@ export interface RuntimeState {
   status: string;
   message: string;
 }
+
+export interface ModelStatus {
+  coreReady: boolean;
+  speechReady: boolean;
+  downloading: boolean;
+  component: 'core' | 'speech' | null;
+  progress: number;
+  title: string;
+  detail: string;
+  coreDownloadBytes: number;
+  speechDownloadBytes: number;
+}
+
+export interface UpdateStatus {
+  currentVersion: string;
+  available: boolean;
+  version: string | null;
+  notes: string | null;
+  date: string | null;
+  contentLength: number | null;
+  downloaded: number;
+  downloading: boolean;
+  installed: boolean;
+}
+
+let pendingUpdate: Update | null = null;
 
 export interface Sentence {
   sourceText: string;
@@ -123,6 +152,75 @@ export function isTauri(): boolean {
 
 export async function getSettings(): Promise<SettingsPayload> {
   return isTauri() ? invoke<SettingsPayload>('get_settings') : structuredClone(previewSettings);
+}
+
+export async function getModelStatus(): Promise<ModelStatus> {
+  if (isTauri()) return invoke<ModelStatus>('get_model_status');
+  return {
+    coreReady: true,
+    speechReady: true,
+    downloading: false,
+    component: null,
+    progress: 1,
+    title: 'Ready',
+    detail: 'Models installed',
+    coreDownloadBytes: 4_222_472_192,
+    speechDownloadBytes: 3_075_601_408
+  };
+}
+
+export async function startModelDownload(component: 'core' | 'speech'): Promise<ModelStatus> {
+  if (isTauri()) return invoke<ModelStatus>('start_model_download', { component });
+  return getModelStatus();
+}
+
+export async function checkForUpdates(): Promise<UpdateStatus> {
+  const currentVersion = isTauri() ? await getVersion() : '1.2.0-beta.1';
+  if (!isTauri()) {
+    return { currentVersion, available: false, version: null, notes: null, date: null, contentLength: null, downloaded: 0, downloading: false, installed: false };
+  }
+  pendingUpdate?.close();
+  pendingUpdate = await check({ timeout: 30_000 });
+  return {
+    currentVersion,
+    available: Boolean(pendingUpdate),
+    version: pendingUpdate?.version ?? null,
+    notes: pendingUpdate?.body ?? null,
+    date: pendingUpdate?.date ?? null,
+    contentLength: null,
+    downloaded: 0,
+    downloading: false,
+    installed: false
+  };
+}
+
+export async function downloadUpdate(onProgress: (status: UpdateStatus) => void): Promise<UpdateStatus> {
+  if (!pendingUpdate) throw new Error('No update is ready to download');
+  let downloaded = 0;
+  let contentLength: number | null = null;
+  const base: UpdateStatus = {
+    currentVersion: pendingUpdate.currentVersion,
+    available: true,
+    version: pendingUpdate.version,
+    notes: pendingUpdate.body ?? null,
+    date: pendingUpdate.date ?? null,
+    contentLength,
+    downloaded,
+    downloading: true,
+    installed: false
+  };
+  await pendingUpdate.download((event) => {
+    if (event.event === 'Started') contentLength = event.data.contentLength ?? null;
+    if (event.event === 'Progress') downloaded += event.data.chunkLength;
+    onProgress({ ...base, contentLength, downloaded });
+  }, { timeout: 30 * 60_000 });
+  return { ...base, contentLength, downloaded, downloading: false };
+}
+
+export async function installDownloadedUpdate(restartNow: boolean): Promise<void> {
+  if (!pendingUpdate) throw new Error('No downloaded update is ready to install');
+  await pendingUpdate.install();
+  if (restartNow) await relaunch();
 }
 
 export async function updateSettings(settings: TranslationSettings): Promise<void> {

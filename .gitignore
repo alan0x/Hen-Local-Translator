@@ -8,6 +8,7 @@
 # Build artifacts
 debug/
 target/
+hen-local-translator-shell/.tauri-sidecars/
 
 # Editor / IDE
 .vscode/

@@ -15,23 +15,13 @@ fi
 
 APP_NAME="Hen Local Translator"
 BUNDLE_ID="com.henlocal.translator"
-BIN_NAME="hen-local-translator"
 PROFILE="release"
-ICON_PATH="$ROOT_DIR/hen-local-translator-shell/icons/icon.icns"
 OUT_DIR="$ROOT_DIR/dist"
 VERSION="$WORKSPACE_VERSION"
 MARKETING_VERSION="${VERSION%%[-+]*}"
 BUILD_VERSION="${HEN_LOCAL_BUILD_VERSION:-$MARKETING_VERSION}"
 BUILD_TARGET_DIR="${HEN_LOCAL_CARGO_TARGET_DIR:-${TMPDIR:-/tmp}/hen-local-translator-cargo-target}"
-
-if [[ "$BUILD_TARGET_DIR" == *" "* ]]; then
-  echo "Cargo target directory cannot contain spaces: $BUILD_TARGET_DIR"
-  echo "Set HEN_LOCAL_CARGO_TARGET_DIR to a path without spaces."
-  exit 1
-fi
-mkdir -p "$BUILD_TARGET_DIR"
-export CARGO_TARGET_DIR="$BUILD_TARGET_DIR"
-export MOXIN_DORA_TARGET_DIR="$BUILD_TARGET_DIR"
+TAURI_PRODUCT_NAME="Hen Local Translator"
 
 usage() {
   cat <<EOF
@@ -39,57 +29,38 @@ Usage:
   $(basename "$0") [options]
 
 Options:
-  --app-name <name>      App name shown in Dock/Finder (default: "$APP_NAME")
+  --app-name <name>      App name shown in Finder (default: "$APP_NAME")
   --bundle-id <id>       CFBundleIdentifier (default: "$BUNDLE_ID")
-  --icon <path>          .icns or .png icon path (default: Hen Local icon)
-  --profile <profile>    Cargo profile, e.g. release/dev (default: "$PROFILE")
+  --profile <profile>    Cargo profile: release or dev (default: "$PROFILE")
   --out-dir <dir>        Output directory for .app (default: "$OUT_DIR")
-  --version <version>    CFBundleShortVersionString (default: "$VERSION")
+  --version <version>    App version; must match Cargo.toml (default: "$VERSION")
   -h, --help             Show this help
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --app-name)
-      APP_NAME="$2"
-      shift 2
-      ;;
-    --bundle-id)
-      BUNDLE_ID="$2"
-      shift 2
-      ;;
-    --icon)
-      ICON_PATH="$2"
-      shift 2
-      ;;
-    --profile)
-      PROFILE="$2"
-      shift 2
-      ;;
-    --out-dir)
-      OUT_DIR="$2"
-      shift 2
-      ;;
-    --version)
-      VERSION="$2"
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "Unknown option: $1"
-      usage
-      exit 1
-      ;;
+    --app-name) APP_NAME="$2"; shift 2 ;;
+    --bundle-id) BUNDLE_ID="$2"; shift 2 ;;
+    --profile) PROFILE="$2"; shift 2 ;;
+    --out-dir) OUT_DIR="$2"; shift 2 ;;
+    --version) VERSION="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
 done
 
 if [[ "$VERSION" != "$WORKSPACE_VERSION" ]]; then
   echo "App version $VERSION does not match the workspace version $WORKSPACE_VERSION"
   echo "Set the version with: node scripts/version.mjs set <version>"
+  exit 1
+fi
+if [[ "$PROFILE" != "release" && "$PROFILE" != "dev" ]]; then
+  echo "Unsupported profile: $PROFILE (expected release or dev)"
+  exit 1
+fi
+if [[ "$BUILD_TARGET_DIR" == *" "* ]]; then
+  echo "Cargo target directory cannot contain spaces: $BUILD_TARGET_DIR"
   exit 1
 fi
 if [[ ! "$MARKETING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -101,30 +72,20 @@ if [[ ! "$BUILD_VERSION" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
   exit 1
 fi
 
-echo "Installing and building the Svelte frontend..."
-if [[ "${CI:-}" == "true" ]]; then
-  npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" ci
-else
-  npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" install
-fi
-npm --prefix "$ROOT_DIR/hen-local-translator-shell/ui" run build
+mkdir -p "$BUILD_TARGET_DIR" "$OUT_DIR"
+export CARGO_TARGET_DIR="$BUILD_TARGET_DIR"
+export MOXIN_DORA_TARGET_DIR="$BUILD_TARGET_DIR"
 
-echo "Building binaries..."
 resolve_mlx_prebuilt_path() {
-  local target_dir="$1"
-  local profile="$2"
-  local build_dir="$target_dir/$profile/build"
+  local build_dir="$BUILD_TARGET_DIR/$PROFILE/build"
   if [[ -d "$build_dir" ]]; then
     find "$build_dir" -type d -path '*mlx-sys-*/out/mlx-prebuilt' 2>/dev/null | tail -n 1 || true
   fi
 }
 
 run_cargo_build() {
-  local target_dir="$1"
-  local profile="$2"
-  shift 2
   local mlx_prebuilt_path=""
-  mlx_prebuilt_path="$(resolve_mlx_prebuilt_path "$target_dir" "$profile")"
+  mlx_prebuilt_path="$(resolve_mlx_prebuilt_path)"
   if [[ -n "$mlx_prebuilt_path" ]]; then
     MLX_PREBUILT_PATH="$mlx_prebuilt_path" cargo build --locked "$@"
   else
@@ -132,260 +93,94 @@ run_cargo_build() {
   fi
 }
 
-create_icns_from_png() {
-  local png_path="$1"
-  local icns_path="$2"
-  local tmp_dir iconset fallback_png
-
-  if ! command -v sips >/dev/null 2>&1; then
-    echo "sips not found; cannot convert PNG icon to .icns"
-    exit 1
-  fi
-
-  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/henlocal-iconset.XXXXXX")"
-  iconset="$tmp_dir/AppIcon.iconset"
-  mkdir -p "$iconset"
-
-  sips -z 16 16 "$png_path" --out "$iconset/icon_16x16.png" >/dev/null
-  sips -z 32 32 "$png_path" --out "$iconset/icon_16x16@2x.png" >/dev/null
-  sips -z 32 32 "$png_path" --out "$iconset/icon_32x32.png" >/dev/null
-  sips -z 64 64 "$png_path" --out "$iconset/icon_32x32@2x.png" >/dev/null
-  sips -z 128 128 "$png_path" --out "$iconset/icon_128x128.png" >/dev/null
-  sips -z 256 256 "$png_path" --out "$iconset/icon_128x128@2x.png" >/dev/null
-  sips -z 256 256 "$png_path" --out "$iconset/icon_256x256.png" >/dev/null
-  sips -z 512 512 "$png_path" --out "$iconset/icon_256x256@2x.png" >/dev/null
-  sips -z 512 512 "$png_path" --out "$iconset/icon_512x512.png" >/dev/null
-  sips -z 1024 1024 "$png_path" --out "$iconset/icon_512x512@2x.png" >/dev/null
-
-  if command -v iconutil >/dev/null 2>&1 && iconutil -c icns "$iconset" -o "$icns_path"; then
-    rm -rf "$tmp_dir"
-    return
-  fi
-
-  if ! command -v python3 >/dev/null 2>&1; then
-    echo "python3 not found; cannot create fallback .icns from PNG icon"
-    exit 1
-  fi
-
-  fallback_png="$iconset/icon_512x512@2x.png"
-  python3 - "$fallback_png" "$icns_path" <<'PY'
-from pathlib import Path
-import sys
-
-png_path = Path(sys.argv[1])
-icns_path = Path(sys.argv[2])
-png = png_path.read_bytes()
-chunk_len = 8 + len(png)
-total_len = 8 + chunk_len
-icns_path.write_bytes(
-    b"icns"
-    + total_len.to_bytes(4, "big")
-    + b"ic10"
-    + chunk_len.to_bytes(4, "big")
-    + png
-)
-PY
-  rm -rf "$tmp_dir"
-}
-
-run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p hen-local-translator-shell --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen3-asr --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen35-translator --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p dora-qwen3-tts-mlx --bin qwen-tts-node --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-run_cargo_build "$BUILD_TARGET_DIR" "$PROFILE" -p hen-local-init --profile "$PROFILE" --manifest-path "$ROOT_DIR/Cargo.toml"
-
-SHELL_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/$BIN_NAME"
-QWEN_ASR_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/dora-qwen3-asr"
-QWEN35_TRANSLATOR_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/dora-qwen35-translator"
-QWEN_TTS_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/qwen-tts-node"
-MOXIN_INIT_BIN_PATH="$BUILD_TARGET_DIR/$PROFILE/hen-local-init"
-MLX_METALLIB_PATH="$BUILD_TARGET_DIR/$PROFILE/mlx.metallib"
-DORA_BIN_PATH="$(command -v dora || true)"
-if [[ ! -f "$SHELL_BIN_PATH" ]]; then
-  echo "Binary not found: $SHELL_BIN_PATH"
-  exit 1
+CARGO_PROFILE_ARGS=(--release)
+if [[ "$PROFILE" == "dev" ]]; then
+  CARGO_PROFILE_ARGS=()
 fi
-if [[ ! -f "$QWEN_ASR_BIN_PATH" ]]; then
-  echo "Binary not found: $QWEN_ASR_BIN_PATH"
-  exit 1
-fi
-if [[ ! -f "$QWEN35_TRANSLATOR_BIN_PATH" ]]; then
-  echo "Binary not found: $QWEN35_TRANSLATOR_BIN_PATH"
-  exit 1
-fi
-if [[ ! -f "$QWEN_TTS_BIN_PATH" ]]; then
-  echo "Binary not found: $QWEN_TTS_BIN_PATH"
-  exit 1
-fi
-if [[ ! -f "$MOXIN_INIT_BIN_PATH" ]]; then
-  echo "Binary not found: $MOXIN_INIT_BIN_PATH"
-  exit 1
-fi
-if [[ -z "$DORA_BIN_PATH" || ! -x "$DORA_BIN_PATH" ]]; then
+
+echo "Building required local translation executables..."
+run_cargo_build --manifest-path "$ROOT_DIR/Cargo.toml" "${CARGO_PROFILE_ARGS[@]}" \
+  -p dora-qwen3-asr \
+  -p dora-qwen35-translator \
+  -p hen-local-init
+run_cargo_build --manifest-path "$ROOT_DIR/Cargo.toml" "${CARGO_PROFILE_ARGS[@]}" \
+  -p dora-qwen3-tts-mlx --bin qwen-tts-node
+
+if ! command -v dora >/dev/null 2>&1; then
   echo "dora CLI not found in PATH. Install dora-cli before packaging."
   exit 1
 fi
 
-APP_DIR="$OUT_DIR/$APP_NAME.app"
-CONTENTS_DIR="$APP_DIR/Contents"
-MACOS_DIR="$CONTENTS_DIR/MacOS"
-RES_DIR="$CONTENTS_DIR/Resources"
-SCRIPTS_DIR="$RES_DIR/scripts"
-DATAFLOW_DIR="$RES_DIR/dataflow"
-QWEN_PREVIEW_DIR="$RES_DIR/qwen3-previews"
-QWEN_VOICE_DIR="$RES_DIR/qwen3-voices"
-QWEN_MODEL_DIR="${QWEN3_TTS_MODEL_ROOT:-$HOME/.OminiX/models/qwen3-tts-mlx}"
+TARGET_TRIPLE="aarch64-apple-darwin"
+SIDECAR_DIR="$ROOT_DIR/hen-local-translator-shell/.tauri-sidecars"
+rm -rf "$SIDECAR_DIR"
+mkdir -p "$SIDECAR_DIR"
+stage_sidecar() {
+  local source="$1"
+  local name="$2"
+  if [[ ! -f "$source" ]]; then
+    echo "Required sidecar not found: $source"
+    exit 1
+  fi
+  cp "$source" "$SIDECAR_DIR/${name}-${TARGET_TRIPLE}"
+  chmod +x "$SIDECAR_DIR/${name}-${TARGET_TRIPLE}"
+}
+stage_sidecar "$(command -v dora)" "dora"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/dora-qwen3-asr" "dora-qwen3-asr"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/dora-qwen35-translator" "dora-qwen35-translator"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/qwen-tts-node" "qwen-tts-node"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/hen-local-init" "hen-local-init"
+stage_sidecar "$BUILD_TARGET_DIR/$PROFILE/mlx.metallib" "mlx.metallib"
 
-rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RES_DIR" "$SCRIPTS_DIR" "$DATAFLOW_DIR" "$QWEN_PREVIEW_DIR" "$QWEN_VOICE_DIR"
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+  LOCAL_UPDATER_KEY="$HOME/.tauri/hen-local-translator.key"
+  if [[ ! -f "$LOCAL_UPDATER_KEY" ]]; then
+    echo "Tauri updater signing key not found: $LOCAL_UPDATER_KEY"
+    exit 1
+  fi
+  export TAURI_SIGNING_PRIVATE_KEY="$(cat "$LOCAL_UPDATER_KEY")"
+fi
+export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${TAURI_SIGNING_PRIVATE_KEY_PASSWORD:-}"
 
-TRANSLATION_QWEN35_BUNDLE_YAML="$ROOT_DIR/hen-local-translator-shell/dataflow/translation_qwen35.yml"
-if [[ ! -f "$TRANSLATION_QWEN35_BUNDLE_YAML" ]]; then
-  echo "Dataflow file not found: $TRANSLATION_QWEN35_BUNDLE_YAML"
+# Use Tauri's official bundler for the application shell. The previous script
+# assembled Info.plist and the launcher by hand, which produced WebViews that
+# could open as empty white windows in the distributed DMG.
+echo "Building the Tauri application bundle..."
+(
+  cd "$ROOT_DIR/hen-local-translator-shell"
+  if [[ "$PROFILE" == "dev" ]]; then
+    ./ui/node_modules/.bin/tauri build --bundles app --debug --config tauri.bundle.conf.json
+  else
+    ./ui/node_modules/.bin/tauri build --bundles app --config tauri.bundle.conf.json
+  fi
+)
+
+TAURI_APP="$BUILD_TARGET_DIR/$PROFILE/bundle/macos/$TAURI_PRODUCT_NAME.app"
+if [[ ! -d "$TAURI_APP" ]]; then
+  echo "Tauri app bundle not found: $TAURI_APP"
   exit 1
 fi
 
-cp "$SHELL_BIN_PATH" "$MACOS_DIR/${BIN_NAME}-bin"
-cp "$QWEN_ASR_BIN_PATH" "$MACOS_DIR/dora-qwen3-asr"
-cp "$QWEN35_TRANSLATOR_BIN_PATH" "$MACOS_DIR/dora-qwen35-translator"
-cp "$QWEN_TTS_BIN_PATH" "$MACOS_DIR/qwen-tts-node"
-cp "$MOXIN_INIT_BIN_PATH" "$MACOS_DIR/hen-local-init"
-cp "$DORA_BIN_PATH" "$MACOS_DIR/dora"
-if [[ -f "$MLX_METALLIB_PATH" ]]; then
-  cp "$MLX_METALLIB_PATH" "$MACOS_DIR/mlx.metallib"
-fi
-chmod +x "$MACOS_DIR/${BIN_NAME}-bin" "$MACOS_DIR/dora-qwen3-asr" "$MACOS_DIR/dora-qwen35-translator" "$MACOS_DIR/qwen-tts-node" "$MACOS_DIR/hen-local-init"
-chmod +x "$MACOS_DIR/dora"
+APP_DIR="$OUT_DIR/$APP_NAME.app"
+rm -rf "$APP_DIR"
+cp -R "$TAURI_APP" "$APP_DIR"
 
-cp "$ROOT_DIR/scripts/macos_preflight.sh" "$SCRIPTS_DIR/macos_preflight.sh"
-cp "$ROOT_DIR/scripts/macos_bootstrap.sh" "$SCRIPTS_DIR/macos_bootstrap.sh"
-cp "$ROOT_DIR/scripts/macos_install_update.sh" "$SCRIPTS_DIR/macos_install_update.sh"
-chmod +x "$SCRIPTS_DIR/macos_preflight.sh" "$SCRIPTS_DIR/macos_bootstrap.sh" "$SCRIPTS_DIR/macos_install_update.sh"
+PLIST_PATH="$APP_DIR/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING_VERSION" "$PLIST_PATH"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_VERSION" "$PLIST_PATH"
+codesign --force --deep --sign - "$APP_DIR"
 
-cp "$TRANSLATION_QWEN35_BUNDLE_YAML" "$DATAFLOW_DIR/translation_qwen35.yml"
+UPDATER_ARCHIVE="$OUT_DIR/Hen-Local-Translator-v${VERSION}.app.tar.gz"
+rm -f "$UPDATER_ARCHIVE" "$UPDATER_ARCHIVE.sig"
+COPYFILE_DISABLE=1 tar -czf "$UPDATER_ARCHIVE" -C "$OUT_DIR" "$APP_NAME.app"
+(
+  cd "$ROOT_DIR"
+  ./hen-local-translator-shell/ui/node_modules/.bin/tauri signer sign "$UPDATER_ARCHIVE"
+)
+test -s "$UPDATER_ARCHIVE.sig"
+rm -rf "$SIDECAR_DIR"
 
-for preview_voice in vivian serena baiyang yangyang ryan aiden maple juniper; do
-  preview_source="$ROOT_DIR/node-hub/dora-qwen3-tts-mlx/previews/$preview_voice.wav"
-  if [[ ! -f "$preview_source" ]]; then
-    preview_source="$QWEN_MODEL_DIR/previews/$preview_voice.wav"
-  fi
-  if [[ ! -f "$preview_source" ]]; then
-    echo "Voice preview file not found for $preview_voice"
-    exit 1
-  fi
-  cp "$preview_source" "$QWEN_PREVIEW_DIR/$preview_voice.wav"
-done
-
-for bundled_voice in baiyang yangyang maple juniper; do
-  bundled_voice_source="$ROOT_DIR/node-hub/dora-qwen3-tts-mlx/voices/$bundled_voice/ref.wav"
-  if [[ ! -f "$bundled_voice_source" ]]; then
-    bundled_voice_source="$QWEN_MODEL_DIR/voices/$bundled_voice/ref.wav"
-  fi
-  if [[ ! -f "$bundled_voice_source" ]]; then
-    echo "Bundled voice reference not found for $bundled_voice"
-    exit 1
-  fi
-  mkdir -p "$QWEN_VOICE_DIR/$bundled_voice"
-  cp "$bundled_voice_source" "$QWEN_VOICE_DIR/$bundled_voice/ref.wav"
-done
-
-cat > "$MACOS_DIR/$BIN_NAME" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-
-APP_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-RES_DIR="$APP_ROOT/Resources"
-MACOS_DIR="$APP_ROOT/MacOS"
-LOG_DIR="$HOME/Library/Logs/HenLocalTranslator"
-mkdir -p "$LOG_DIR"
-DORA_RUNTIME_DIR="${HEN_LOCAL_DORA_RUNTIME_DIR:-$HOME/.dora/runtime}"
-mkdir -p "$DORA_RUNTIME_DIR"
-cd "$DORA_RUNTIME_DIR"
-
-export HEN_LOCAL_APP_RESOURCES="$RES_DIR"
-export HEN_LOCAL_APP_VERSION="__HEN_LOCAL_APP_VERSION__"
-export HEN_LOCAL_DORA_RUNTIME_DIR="$DORA_RUNTIME_DIR"
-export QWEN3_ASR_MODEL_PATH="${QWEN3_ASR_MODEL_PATH:-$HOME/.OminiX/models/qwen3-asr-1.7b}"
-export QWEN35_TRANSLATOR_MODEL_PATH="${QWEN35_TRANSLATOR_MODEL_PATH:-$HOME/.OminiX/models/Qwen3.5-2B-MLX-4bit}"
-export QWEN35_TRANSLATOR_REPO="${QWEN35_TRANSLATOR_REPO:-mlx-community/Qwen3.5-2B-MLX-4bit}"
-export PATH="$MACOS_DIR:$HOME/.cargo/bin:$PATH"
-
-exec "$MACOS_DIR/hen-local-translator-bin"
-EOF
-
-sed -i '' "s/__HEN_LOCAL_APP_VERSION__/$VERSION/g" "$MACOS_DIR/$BIN_NAME"
-chmod +x "$MACOS_DIR/$BIN_NAME"
-
-ICON_FILE_NAME=""
-if [[ -n "$ICON_PATH" ]]; then
-  if [[ ! -f "$ICON_PATH" ]]; then
-    echo "Icon file not found: $ICON_PATH"
-    exit 1
-  fi
-
-  ext="${ICON_PATH##*.}"
-  ext_lower="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
-
-  if [[ "$ext_lower" == "icns" ]]; then
-    cp "$ICON_PATH" "$RES_DIR/AppIcon.icns"
-    ICON_FILE_NAME="AppIcon"
-  elif [[ "$ext_lower" == "png" ]]; then
-    cp "$ICON_PATH" "$RES_DIR/AppIcon.png"
-    create_icns_from_png "$ICON_PATH" "$RES_DIR/AppIcon.icns"
-    ICON_FILE_NAME="AppIcon"
-  else
-    echo "Unsupported icon format: $ICON_PATH (use .icns or .png)"
-    exit 1
-  fi
-fi
-
-PLIST_PATH="$CONTENTS_DIR/Info.plist"
-cat > "$PLIST_PATH" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleName</key>
-  <string>${APP_NAME}</string>
-  <key>CFBundleDisplayName</key>
-  <string>${APP_NAME}</string>
-  <key>CFBundleIdentifier</key>
-  <string>${BUNDLE_ID}</string>
-  <key>CFBundleExecutable</key>
-  <string>${BIN_NAME}</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleVersion</key>
-  <string>${BUILD_VERSION}</string>
-  <key>CFBundleShortVersionString</key>
-  <string>${MARKETING_VERSION}</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>13.0</string>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSMicrophoneUsageDescription</key>
-  <string>This app needs microphone access for live translation.</string>
-  <key>NSScreenCaptureUsageDescription</key>
-  <string>This app needs screen capture access to capture system audio for live translation.</string>
-EOF
-
-if [[ -n "$ICON_FILE_NAME" ]]; then
-  cat >> "$PLIST_PATH" <<EOF
-  <key>CFBundleIconFile</key>
-  <string>${ICON_FILE_NAME}</string>
-EOF
-fi
-
-cat >> "$PLIST_PATH" <<EOF
-</dict>
-</plist>
-EOF
-
-echo "App bundle created:"
+echo "App bundle created with the official Tauri shell:"
 echo "  $APP_DIR"
-echo
-echo "Run with:"
-echo "  open \"$APP_DIR\""
-echo
-echo "If Dock icon/name is cached, run:"
-echo "  killall Dock"
+echo "Models are intentionally not bundled. Core models download after setup;"
+echo "the optional spoken-translation model downloads only when enabled."

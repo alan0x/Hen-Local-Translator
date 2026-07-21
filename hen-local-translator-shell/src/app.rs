@@ -9,9 +9,9 @@ use moxin_dora_bridge::{data::SentenceUnit, AudioSource, TranslationUpdate};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
+    fs::{self, OpenOptions},
     path::{Path, PathBuf},
-    process::{Child, Command},
+    process::{Child, Command, Stdio},
     thread,
     time::Duration,
 };
@@ -146,12 +146,27 @@ struct OverlayState {
     pending_source_text: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModelStatus {
+    core_ready: bool,
+    speech_ready: bool,
+    downloading: bool,
+    component: Option<String>,
+    progress: f64,
+    title: String,
+    detail: String,
+    core_download_bytes: u64,
+    speech_download_bytes: u64,
+}
+
 struct AppState {
     preferences: Mutex<AppPreferences>,
     runtime: TranslationRuntime,
     runtime_state: Mutex<RuntimeState>,
     resource_dir: Option<PathBuf>,
     voice_preview_process: Mutex<Option<Child>>,
+    model_download_process: Mutex<Option<(String, Child)>>,
     subtitle_preview_visible: Mutex<bool>,
 }
 
@@ -166,6 +181,7 @@ impl AppState {
             runtime_state: Mutex::new(RuntimeState::default()),
             resource_dir,
             voice_preview_process: Mutex::new(None),
+            model_download_process: Mutex::new(None),
             subtitle_preview_visible: Mutex::new(true),
         };
         state.sync_shared_state();
@@ -384,6 +400,103 @@ impl AppState {
         fs::write(directory.join(filename), markdown)
             .map_err(|error| format!("Could not save transcript: {error}"))
     }
+
+    fn model_status(&self) -> ModelStatus {
+        let mut process = self.model_download_process.lock();
+        let mut active_component = None;
+        if let Some((component, child)) = process.as_mut() {
+            match child.try_wait() {
+                Ok(None) => active_component = Some(component.clone()),
+                Ok(Some(_)) | Err(_) => *process = None,
+            }
+        }
+        let component = active_component.clone();
+        let (progress, title, detail) = component
+            .as_deref()
+            .and_then(read_model_download_state)
+            .unwrap_or_else(|| {
+                if core_models_ready() {
+                    (1.0, "Ready".into(), "Core translation models are installed".into())
+                } else {
+                    (0.0, "Models required".into(), "Download models to start translating".into())
+                }
+            });
+        ModelStatus {
+            core_ready: core_models_ready(),
+            speech_ready: speech_model_ready(),
+            downloading: active_component.is_some(),
+            component,
+            progress,
+            title,
+            detail,
+            core_download_bytes: 4_222_472_192,
+            speech_download_bytes: 3_075_601_408,
+        }
+    }
+}
+
+fn model_root() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".OminiX/models")
+}
+
+fn core_models_ready() -> bool {
+    let root = model_root();
+    let asr = root.join("qwen3-asr-1.7b");
+    let translator = root.join("Qwen3.5-2B-MLX-4bit");
+    asr.join("config.json").is_file()
+        && translator.join("config.json").is_file()
+        && translator.join("tokenizer.json").is_file()
+        && (translator.join("model.safetensors").is_file()
+            || translator.join("model.safetensors.index.json").is_file())
+}
+
+fn speech_model_ready() -> bool {
+    let model = model_root()
+        .join("qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit");
+    model.join("config.json").is_file()
+        && model.join("model.safetensors").is_file()
+        && model.join("speech_tokenizer/config.json").is_file()
+        && model.join("speech_tokenizer/model.safetensors").is_file()
+}
+
+fn model_state_path(component: &str) -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Library/Logs/HenLocalTranslator")
+        .join(format!("{component}_model_state.txt"))
+}
+
+fn read_model_download_state(component: &str) -> Option<(f64, String, String)> {
+    let content = fs::read_to_string(model_state_path(component)).ok()?;
+    let mut fields = content.trim().split('|');
+    let _step = fields.next()?;
+    let title = fields.next()?.to_string();
+    let detail = fields.next()?.to_string();
+    let progress = fields.next()?.parse::<f64>().ok()?.clamp(0.0, 1.0);
+    Some((progress, title, detail))
+}
+
+fn resolve_model_downloader() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(directory) = executable.parent() {
+            candidates.push(directory.join("hen-local-init"));
+        }
+    }
+    for variable in ["MOXIN_DORA_TARGET_DIR", "CARGO_TARGET_DIR"] {
+        if let Some(directory) = std::env::var_os(variable) {
+            let directory = PathBuf::from(directory);
+            candidates.push(directory.join("debug/hen-local-init"));
+            candidates.push(directory.join("release/hen-local-init"));
+        }
+    }
+    candidates.extend([
+        PathBuf::from("target/debug/hen-local-init"),
+        PathBuf::from("target/release/hen-local-init"),
+    ]);
+    candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
 #[tauri::command]
@@ -399,6 +512,65 @@ fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
         runtime_status: runtime_state.status,
         runtime_message: runtime_state.message,
     }
+}
+
+#[tauri::command]
+fn get_model_status(state: State<'_, AppState>) -> ModelStatus {
+    state.model_status()
+}
+
+#[tauri::command]
+fn start_model_download(
+    state: State<'_, AppState>,
+    component: String,
+) -> Result<ModelStatus, String> {
+    let component = match component.as_str() {
+        "core" => "core",
+        "speech" => "speech",
+        _ => return Err("Unknown model component".into()),
+    };
+    if component == "core" && core_models_ready() {
+        return Ok(state.model_status());
+    }
+    if component == "speech" && speech_model_ready() {
+        return Ok(state.model_status());
+    }
+
+    let mut running = state.model_download_process.lock();
+    if let Some((_, child)) = running.as_mut() {
+        if child.try_wait().map_err(|error| error.to_string())?.is_none() {
+            return Err("A model download is already running".into());
+        }
+        *running = None;
+    }
+
+    let downloader = resolve_model_downloader()
+        .ok_or_else(|| "The bundled model downloader is missing. Reinstall the app.".to_string())?;
+    let state_path = model_state_path(component);
+    if let Some(parent) = state_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let _ = fs::remove_file(&state_path);
+    let log_path = state_path.with_extension("log");
+    let log = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&log_path)
+        .map_err(|error| format!("Could not create model download log: {error}"))?;
+    let child = Command::new(downloader)
+        .env("HEN_LOCAL_MODEL_COMPONENT", component)
+        .env("HEN_LOCAL_BOOTSTRAP_STATE_PATH", &state_path)
+        .stdout(Stdio::from(
+            log.try_clone()
+                .map_err(|error| format!("Could not open model log: {error}"))?,
+        ))
+        .stderr(Stdio::from(log))
+        .spawn()
+        .map_err(|error| format!("Could not start model download: {error}"))?;
+    *running = Some((component.to_string(), child));
+    drop(running);
+    Ok(state.model_status())
 }
 
 #[tauri::command]
@@ -429,6 +601,12 @@ fn start_translation(
     state: State<'_, AppState>,
     settings: TranslationSettings,
 ) -> Result<RuntimeState, String> {
+    if !core_models_ready() {
+        return Err("Download the core translation models before starting live translation".into());
+    }
+    if settings.spoken_translation_enabled && !speech_model_ready() {
+        return Err("Download the spoken-translation model before enabling spoken translation".into());
+    }
     {
         let mut preferences = state.preferences.lock();
         settings.apply_to(&mut preferences);
@@ -792,6 +970,8 @@ fn start_event_bridge(app_handle: tauri::AppHandle) {
 pub fn run(args: Args) {
     let cli_dataflow = args.dataflow.clone();
     tauri::Builder::default()
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             let resource_dir = app.path().resource_dir().ok();
             app.manage(AppState::new(resource_dir));
@@ -817,6 +997,8 @@ pub fn run(args: Args) {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            get_model_status,
+            start_model_download,
             update_settings,
             start_translation,
             stop_translation,

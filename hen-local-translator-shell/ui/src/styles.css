@@ -175,6 +175,51 @@ select:disabled, button:disabled { cursor: not-allowed; }
 .theme-mark { width: 34px; height: 34px; display: block; background: var(--theme-swatch); -webkit-mask: var(--brand-mark) center / contain no-repeat; mask: var(--brand-mark) center / contain no-repeat; }
 .privacy-note { margin: 0; padding: 16px 18px; color: var(--muted); font-size: 12px; }
 
+.model-settings { border-top: 1px solid var(--line); }
+.model-row { min-height: 58px; padding: 10px 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #dedfe1; }
+.model-row > div { min-width: 0; display: grid; gap: 4px; }
+.model-row strong { font-size: 11px; letter-spacing: .04em; }
+.model-row small { color: var(--muted); font-size: 10px; }
+.model-row button { min-width: 84px; height: 32px; border: 1px solid var(--ink); background: #fff; font-size: 10px; font-weight: 760; }
+.model-row button:not(:disabled):hover { background: var(--ink); color: #fff; }
+.model-row button:disabled { color: var(--muted); }
+.model-progress { height: 5px; margin: 12px 18px 0; background: #e5e6e8; overflow: hidden; }
+.model-progress span { display: block; height: 100%; background: var(--accent); transition: width 180ms linear; }
+.model-detail { margin: 7px 18px 13px; color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.model-setup-backdrop { z-index: 40; background: rgba(255,255,255,.92); }
+.model-setup { width: min(620px, calc(100vw - 48px)); padding: 32px; border: 1.5px solid var(--ink); background: #fff; box-shadow: 12px 12px 0 rgba(16,17,18,.13); display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 22px 18px; align-items: start; }
+.model-setup .brand-logo-tile { grid-row: 1 / span 2; }
+.model-setup h2 { margin: 4px 0 10px; font-size: 25px; letter-spacing: -.04em; }
+.model-setup p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.model-setup .setup-kicker { color: var(--accent-text); font-size: 10px; font-weight: 800; letter-spacing: .14em; }
+.model-setup > .launch-button, .setup-progress { grid-column: 2; }
+.setup-progress { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px 12px; align-items: center; }
+.setup-progress > div { height: 9px; background: #e5e6e8; overflow: hidden; }
+.setup-progress > div span { display: block; height: 100%; background: var(--accent); transition: width 180ms linear; }
+.setup-progress strong { text-align: right; font-size: 12px; }
+.setup-progress small { grid-column: 1 / -1; color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-setup .setup-error { grid-column: 2; color: #bd241d; font-weight: 700; }
+
+.update-settings { padding: 13px 18px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; }
+.update-settings > div { display: grid; gap: 4px; }
+.update-settings strong { font-size: 11px; letter-spacing: .04em; }
+.update-settings small, .update-settings p { color: var(--muted); font-size: 10px; }
+.update-settings p { grid-column: 1 / -1; margin: 0; }
+.update-settings button { min-width: 118px; height: 34px; border: 1px solid var(--ink); background: #fff; font-size: 10px; font-weight: 760; }
+.update-settings button:not(:disabled):hover { background: var(--ink); color: #fff; }
+.update-error { color: #bd241d !important; font-weight: 700; }
+.update-modal { width: min(560px, calc(100vw - 48px)); }
+.update-content { padding: 22px 22px 16px; }
+.update-version { display: flex; align-items: center; gap: 12px; font-size: 17px; }
+.update-version span { color: var(--muted); }
+.update-version strong { color: var(--accent-text); }
+.update-notes { max-height: 140px; overflow: auto; white-space: pre-wrap; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.update-warning { padding: 10px 12px; background: #fff4dc; color: #6e4900; font-size: 11px; font-weight: 650; }
+.update-actions { min-height: 62px; padding: 10px; border-top: 1px solid var(--ink); display: flex; justify-content: flex-end; gap: 8px; }
+.update-actions button { min-width: 160px; min-height: 40px; border: 1px solid var(--ink); background: #fff; font-size: 11px; font-weight: 760; }
+.update-actions .primary { background: var(--accent); color: var(--accent-on-solid); }
+
 .loading-screen { width: 100%; height: 100%; display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center; background: white; color: var(--muted); }
 .loading-screen p { font-size: 11px; letter-spacing: .16em; font-weight: 700; }
 

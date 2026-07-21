@@ -3,16 +3,23 @@
   import logoUrl from '../../icons/logo-mark.png';
   import {
     getSettings,
+    getModelStatus,
+    checkForUpdates,
+    downloadUpdate,
+    installDownloadedUpdate,
     listenRuntime,
     openTranscriptHistory,
     previewSpokenVoice,
     startTranslation,
+    startModelDownload,
     stopSpokenVoicePreview,
     stopTranslation,
     toggleSubtitlePreview,
     updateSettings,
     type AccentTheme,
     type RuntimeState,
+    type ModelStatus,
+    type UpdateStatus,
     type SettingsPayload,
     type TranslationSettings
   } from './lib/api';
@@ -54,6 +61,13 @@
   let previewTimer: number | null = null;
   let busy = false;
   let errorMessage = '';
+  let modelStatus: ModelStatus | null = null;
+  let modelTimer: number | null = null;
+  let updateStatus: UpdateStatus | null = null;
+  let updateBusy = false;
+  let updateError = '';
+  let updateDialogOpen = false;
+  let updateDownloaded = false;
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
@@ -170,6 +184,11 @@
 
   async function setSpokenTranslation(enabled: boolean): Promise<void> {
     if (!settings) return;
+    if (enabled && modelStatus && !modelStatus.speechReady) {
+      appSettingsOpen = true;
+      await downloadModels('speech');
+      return;
+    }
     if (!enabled) await stopVoicePreview();
     settings.spokenTranslationEnabled = enabled;
     settings = { ...settings };
@@ -223,6 +242,83 @@
     runtimeMessage = state.message;
   }
 
+  function formatDownloadSize(bytes: number): string {
+    return `${(bytes / 1_000_000_000).toFixed(1)} GB`;
+  }
+
+  async function refreshModelStatus(): Promise<void> {
+    try {
+      modelStatus = await getModelStatus();
+      if (modelStatus.coreReady && modelStatus.speechReady && modelTimer !== null) {
+        window.clearInterval(modelTimer);
+        modelTimer = null;
+      }
+    } catch (error) {
+      errorMessage = String(error);
+    }
+  }
+
+  async function downloadModels(component: 'core' | 'speech'): Promise<void> {
+    errorMessage = '';
+    try {
+      modelStatus = await startModelDownload(component);
+      if (modelTimer === null) {
+        modelTimer = window.setInterval(() => void refreshModelStatus(), 750);
+      }
+    } catch (error) {
+      errorMessage = String(error);
+    }
+  }
+
+  async function checkUpdates(manual = true): Promise<void> {
+    if (updateBusy) return;
+    updateBusy = true;
+    updateError = '';
+    try {
+      updateStatus = await checkForUpdates();
+      localStorage.setItem('hen-local-last-update-check', String(Date.now()));
+      if (updateStatus.available) updateDialogOpen = true;
+    } catch (error) {
+      if (manual) updateError = String(error);
+    } finally {
+      updateBusy = false;
+    }
+  }
+
+  async function prepareUpdate(): Promise<boolean> {
+    if (!updateStatus?.available) return false;
+    if (updateDownloaded) return true;
+    updateBusy = true;
+    updateError = '';
+    try {
+      updateStatus = await downloadUpdate((status) => { updateStatus = status; });
+      updateDownloaded = true;
+      return true;
+    } catch (error) {
+      updateError = String(error);
+      return false;
+    } finally {
+      updateBusy = false;
+    }
+  }
+
+  async function applyUpdate(restartNow: boolean): Promise<void> {
+    if (running) {
+      updateError = tr('请先停止实时翻译，再安装更新。', 'Stop live translation before installing the update.');
+      return;
+    }
+    if (!(await prepareUpdate())) return;
+    updateBusy = true;
+    try {
+      await installDownloadedUpdate(restartNow);
+      if (!restartNow) updateDialogOpen = false;
+    } catch (error) {
+      updateError = String(error);
+    } finally {
+      updateBusy = false;
+    }
+  }
+
   function runtimeDisplayMessage(): string {
     if (runtimeStatus === 'error') return runtimeMessage;
     if (runtimeStatus === 'listening') return tr('实时翻译进行中', 'Live translation active');
@@ -248,8 +344,14 @@
       errorMessage = String(error);
     });
     void listenRuntime(applyRuntime).then((cleanup) => { unlisten = cleanup; });
+    void refreshModelStatus();
+    const lastUpdateCheck = Number(localStorage.getItem('hen-local-last-update-check') ?? '0');
+    if (Date.now() - lastUpdateCheck > 24 * 60 * 60 * 1000) {
+      window.setTimeout(() => void checkUpdates(false), 2500);
+    }
     return () => {
       clearPreviewTimer();
+      if (modelTimer !== null) window.clearInterval(modelTimer);
       void stopSpokenVoicePreview();
       unlisten();
     };
@@ -469,7 +571,75 @@
             {/each}
           </div>
         </div>
+        {#if modelStatus}
+          <section class="model-settings">
+            <div class="model-row">
+              <div><strong>{tr('核心翻译模型', 'CORE TRANSLATION MODELS')}</strong><small>{formatDownloadSize(modelStatus.coreDownloadBytes)}</small></div>
+              <button disabled={modelStatus.coreReady || modelStatus.downloading} on:click={() => downloadModels('core')}>{modelStatus.coreReady ? tr('已安装', 'INSTALLED') : tr('下载', 'DOWNLOAD')}</button>
+            </div>
+            <div class="model-row">
+              <div><strong>{tr('译文播报模型', 'SPOKEN TRANSLATION MODEL')}</strong><small>{formatDownloadSize(modelStatus.speechDownloadBytes)} · {tr('按需下载', 'OPTIONAL')}</small></div>
+              <button disabled={modelStatus.speechReady || modelStatus.downloading} on:click={() => downloadModels('speech')}>{modelStatus.speechReady ? tr('已安装', 'INSTALLED') : tr('下载', 'DOWNLOAD')}</button>
+            </div>
+            {#if modelStatus.downloading}
+              <div class="model-progress"><span style={`width:${Math.round(modelStatus.progress * 100)}%`}></span></div>
+              <p class="model-detail">{modelStatus.title} · {modelStatus.detail} · {Math.round(modelStatus.progress * 100)}%</p>
+            {/if}
+          </section>
+        {/if}
+        <section class="update-settings">
+          <div>
+            <strong>{tr('软件更新', 'SOFTWARE UPDATE')}</strong>
+            <small>{updateStatus ? `${tr('当前版本', 'CURRENT')} ${updateStatus.currentVersion}` : tr('每天自动检查一次', 'CHECKED ONCE A DAY')}</small>
+          </div>
+          <button disabled={updateBusy} on:click={() => checkUpdates(true)}>{updateBusy ? tr('检查中…', 'CHECKING…') : tr('检查更新', 'CHECK FOR UPDATES')}</button>
+          {#if updateStatus && !updateStatus.available && !updateBusy}<p>{tr('已经是最新版本。', 'You are up to date.')}</p>{/if}
+          {#if updateError}<p class="update-error">{updateError}</p>{/if}
+        </section>
         <p class="privacy-note">{tr('语音、字幕和偏好设置均保留在本机。', 'Audio, subtitles, and preferences remain on this device.')}</p>
+      </dialog>
+    </div>
+  {/if}
+  {#if modelStatus && !modelStatus.coreReady}
+    <div class="modal-backdrop model-setup-backdrop">
+      <section class="model-setup" aria-label={tr('下载本地模型', 'Download local models')}>
+        <span class="brand-logo-tile"><span class="brand-logo" style={`--brand-mark:url("${logoUrl}")`} aria-hidden="true"></span></span>
+        <div>
+          <p class="setup-kicker">{tr('首次使用设置', 'FIRST-TIME SETUP')}</p>
+          <h2>{tr('下载本地翻译模型', 'DOWNLOAD LOCAL TRANSLATION MODELS')}</h2>
+          <p>{tr('模型约 4.2 GB，只需下载一次。语音和字幕始终在这台电脑上处理。', 'The models are about 4.2 GB and download once. Audio and subtitles stay on this Mac.')}</p>
+        </div>
+        {#if modelStatus.downloading && modelStatus.component === 'core'}
+          <div class="setup-progress">
+            <div><span style={`width:${Math.round(modelStatus.progress * 100)}%`}></span></div>
+            <strong>{Math.round(modelStatus.progress * 100)}%</strong>
+            <small>{modelStatus.title} · {modelStatus.detail}</small>
+          </div>
+        {:else}
+          <button class="launch-button" on:click={() => downloadModels('core')}>{tr('下载并继续', 'DOWNLOAD AND CONTINUE')}</button>
+        {/if}
+        {#if errorMessage}<p class="setup-error">{errorMessage}</p>{/if}
+      </section>
+    </div>
+  {/if}
+  {#if updateDialogOpen && updateStatus?.available}
+    <div class="modal-backdrop update-backdrop">
+      <dialog open class="modal update-modal" aria-label={tr('软件更新', 'Software update')}>
+        <header><div><span>UPDATE</span><h2>{tr('发现新版本', 'UPDATE AVAILABLE')}</h2></div><button disabled={updateBusy} on:click={() => updateDialogOpen = false}>×</button></header>
+        <div class="update-content">
+          <div class="update-version"><span>{updateStatus.currentVersion}</span><b>→</b><strong>{updateStatus.version}</strong></div>
+          {#if updateStatus.notes}<p class="update-notes">{updateStatus.notes}</p>{/if}
+          {#if updateStatus.downloading || updateDownloaded}
+            <div class="model-progress"><span style={`width:${updateStatus.contentLength ? Math.min(100, Math.round(updateStatus.downloaded / updateStatus.contentLength * 100)) : updateDownloaded ? 100 : 12}%`}></span></div>
+            <p class="model-detail">{updateDownloaded ? tr('下载完成，可以安装。', 'Download complete. Ready to install.') : tr('正在安全下载更新…', 'Downloading update securely…')}</p>
+          {/if}
+          {#if running}<p class="update-warning">{tr('实时翻译进行中。停止翻译后才能安装，当前会话不会被打断。', 'Live translation is active. Stop it before installing; this session will not be interrupted.')}</p>{/if}
+          {#if updateError}<p class="update-error">{updateError}</p>{/if}
+        </div>
+        <footer class="update-actions">
+          <button disabled={updateBusy || running} on:click={() => applyUpdate(false)}>{tr('退出后生效', 'INSTALL WHEN I QUIT')}</button>
+          <button class="primary" disabled={updateBusy || running} on:click={() => applyUpdate(true)}>{updateBusy ? tr('请稍候…', 'PLEASE WAIT…') : tr('重新启动并更新', 'RESTART AND UPDATE')}</button>
+        </footer>
       </dialog>
     </div>
   {/if}

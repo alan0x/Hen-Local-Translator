@@ -25,8 +25,8 @@ elif [[ -f "$APP_RESOURCES/hen-local-translator-shell/dataflow/translation_qwen3
   TRANSLATION_DATAFLOW_PATH="$APP_RESOURCES/hen-local-translator-shell/dataflow/translation_qwen35.yml"
 fi
 
-if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator-bin" ]]; then
-  APP_BIN_PATH="$APP_RESOURCES/../MacOS/hen-local-translator-bin"
+if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator" ]]; then
+  APP_BIN_PATH="$APP_RESOURCES/../MacOS/hen-local-translator"
 else
   APP_BIN_PATH="$APP_RESOURCES/target/debug/hen-local-translator"
   if [[ ! -f "$APP_BIN_PATH" ]]; then
@@ -149,7 +149,7 @@ fi
 # Check hen-local-init binary (required for first-run bootstrap)
 resolve_hen_local_init
 if [[ "$hen_local_init_resolved" != "1" ]]; then
-  if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator-bin" ]]; then
+  if [[ -f "$APP_RESOURCES/../MacOS/hen-local-translator" ]]; then
     errors+=("hen-local-init binary missing from app bundle. Run build_macos_app.sh.")
   else
     warnings+=("hen-local-init not found in dev tree (run: cargo build -p hen-local-init --release)")

@@ -4,7 +4,7 @@ This file is the source of truth for product-release, subscription, licensing,
 and usage-tracking work. Update it whenever work starts, finishes, changes
 scope, or becomes blocked.
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## How to use this tracker
 
@@ -25,8 +25,8 @@ Status notation:
 
 ## Current focus
 
-- 🔄 **In progress:** Add the official Tauri 2 updater foundation and a
-  manual **Check for Updates** control to the application.
+- 🔄 **In progress:** Build the account, subscription, and entitlement backend
+  foundation while the signed updater receives its first tagged end-to-end test.
 
 Apple signing/notarization remains a production-release blocker. Once the paid
 Developer Program membership is active, configure the five required GitHub
@@ -62,7 +62,7 @@ Not included at launch:
 - [x] An update smoke-test script exists.
 - [x] Git history contains an older background GitHub updater prototype in
   commit `0b65455`.
-- [ ] The current Tauri application has a production updater integration.
+- [x] The current Tauri application has a production updater integration.
 - [x] The repository has an automated GitHub release workflow.
 - [ ] Release artifacts are Developer ID signed and Apple notarized.
 - [ ] Update artifacts are cryptographically signed and verified by the app.
@@ -101,8 +101,8 @@ Goal: one Git tag produces a reproducible, trusted macOS release.
 - [ ] Enable hardened runtime with the required entitlements.
 - [x] Verify DMG creation on the GitHub runner.
 - [ ] Submit the app/DMG to Apple notarization and staple the ticket.
-- [ ] Generate Tauri updater artifacts and signatures.
-- [ ] Generate `latest.json`; SHA-256 checksum generation is complete.
+- [x] Generate Tauri updater artifacts and signatures.
+- [x] Generate `latest.json`; SHA-256 checksum generation is complete.
 - [ ] Publish updater artifacts and signatures; DMG, checksums, and generated
   notes will be uploaded to a draft GitHub Release after the workflow is
   verified with its first test tag.
@@ -114,8 +114,9 @@ Goal: one Git tag produces a reproducible, trusted macOS release.
 - [ ] Confirm an active Apple Developer Program membership.
 - [ ] Create/export the Developer ID signing certificate for CI.
 - [ ] Configure Apple notarization credentials.
-- [ ] Generate the Tauri updater signing keypair.
-- [ ] Store all private credentials only in encrypted CI secrets.
+- [x] Generate the Tauri updater signing keypair.
+- [x] Store the updater private credential in an encrypted CI secret; Apple
+  credentials remain pending.
 - [x] Permit an explicitly labeled unsigned draft for internal CI testing while
   Apple Developer Program activation is pending.
 
@@ -134,17 +135,17 @@ Goal: customers can safely discover and install new versions from the app.
 
 ### Tasks
 
-- [ ] Add and configure the Tauri 2 updater plugin.
-- [ ] Embed only the updater public key in the application.
-- [ ] Point the stable channel at the stable `latest.json` endpoint.
+- [x] Add and configure the Tauri 2 updater plugin.
+- [x] Embed only the updater public key in the application.
+- [x] Point the stable channel at the stable `latest.json` endpoint.
 - [ ] Add a beta endpoint/channel for invited testers.
-- [ ] Check for updates shortly after launch and no more than once per day.
-- [ ] Add **Check for Updates** to Settings/About.
-- [ ] Display version, release notes, download size, and progress.
-- [ ] Add **Restart and Update**, **Install When I Quit**, and **Later**.
-- [ ] Prevent an automatic restart during an active translation session.
-- [ ] Remove or retire the insecure custom DMG download path after migration.
-- [ ] Update the existing smoke test for the Tauri updater format.
+- [x] Check for updates shortly after launch and no more than once per day.
+- [x] Add **Check for Updates** to Settings/About.
+- [x] Display version, release notes, download size, and progress.
+- [x] Add **Restart and Update**, **Install When I Quit**, and **Later**.
+- [x] Prevent an automatic restart during an active translation session.
+- [x] Remove or retire the insecure custom DMG download path after migration.
+- [x] Update the existing smoke test for the Tauri updater format.
 
 ### Acceptance criteria
 
@@ -325,6 +326,17 @@ Goal: validate the single subscription before introducing more pricing.
 
 ## Progress log
 
+- 2026-07-21: Replaced the hand-assembled macOS app wrapper that produced blank
+  WebViews in the internal DMG with Tauri's official application bundler. The
+  rebuilt app, DMG, signed updater archive, embedded local executables, numeric
+  Apple bundle version, and static updater manifest pass local structural and
+  signature smoke tests. A locked Mac prevented the final visual launch check.
+- 2026-07-21: Added first-run core model delivery (about 4.2 GB) and optional
+  spoken-translation model delivery (about 3.1 GB), with in-app progress and
+  retry-safe downloads. Models are intentionally excluded from the 75 MB DMG.
+- 2026-07-21: Added the official Tauri updater, stable GitHub endpoint, daily
+  automatic checks, manual Settings control, progress, deferred/restart install
+  choices, active-session protection, signing key, CI secret, and `latest.json`.
 - 2026-07-20: Verified the `v1.2.0-beta.1` unsigned internal-test pipeline on a
   clean GitHub Apple Silicon runner. The generated 91 MB DMG passed its SHA-256
   checksum and disk-image verification, mounted successfully, contained the

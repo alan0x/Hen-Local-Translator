@@ -168,8 +168,15 @@ function refreshCargoLock() {
 
 function checkVersions() {
   const workspaceVersion = readWorkspaceVersion();
-  const { values } = versionTargets();
+  const { values, tauriConfig } = versionTargets();
   const mismatches = values.filter(([, version]) => version !== workspaceVersion);
+  const macBundleVersion = workspaceVersion.split(/[-+]/, 1)[0];
+  if (tauriConfig.bundle?.macOS?.bundleVersion !== macBundleVersion) {
+    mismatches.push([
+      'hen-local-translator-shell/tauri.conf.json bundle.macOS.bundleVersion',
+      tauriConfig.bundle?.macOS?.bundleVersion,
+    ]);
+  }
 
   if (mismatches.length > 0) {
     console.error(`Version mismatch: Cargo.toml is ${workspaceVersion}`);
@@ -191,6 +198,7 @@ function syncVersions() {
   const { tauriConfig, uiPackage, uiPackageLock } = versionTargets();
 
   tauriConfig.version = workspaceVersion;
+  tauriConfig.bundle.macOS.bundleVersion = workspaceVersion.split(/[-+]/, 1)[0];
   uiPackage.version = workspaceVersion;
   uiPackageLock.version = workspaceVersion;
   uiPackageLock.packages[''].version = workspaceVersion;
