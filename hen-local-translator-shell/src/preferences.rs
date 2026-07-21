@@ -6,20 +6,6 @@ use std::{fs, path::PathBuf};
 pub struct AppPreferences {
     pub app_language: String,
     pub accent_theme: String,
-    pub display_name: String,
-    pub avatar_letter: String,
-    pub last_seen_app_version: Option<String>,
-    pub default_voice_id: Option<String>,
-    pub default_speed: f64,
-    pub default_pitch: f64,
-    pub default_volume: f64,
-    pub history_retention_days: i64,
-    pub inference_backend: String,
-    pub zero_shot_backend: String,
-    pub training_backend: String,
-    pub preferred_output_device: Option<String>,
-    pub preferred_input_device: Option<String>,
-    pub tts_download_format: String,
     pub translation_auto_save_transcript: bool,
     pub translation_periodic_save_transcript: bool,
     pub translation_transcript_file_name: String,
@@ -33,9 +19,7 @@ pub struct AppPreferences {
     pub translation_font_size_preset: String,
     pub translation_anchor_position_preset: String,
     pub experimental_spoken_translation_enabled: bool,
-    pub experimental_spoken_translation_output_device: Option<String>,
     pub experimental_spoken_translation_voice: Option<String>,
-    pub debug_logs_enabled: bool,
 }
 
 impl Default for AppPreferences {
@@ -43,20 +27,6 @@ impl Default for AppPreferences {
         Self {
             app_language: "zh".into(),
             accent_theme: "neon-blue".into(),
-            display_name: "User".into(),
-            avatar_letter: "U".into(),
-            last_seen_app_version: None,
-            default_voice_id: Some("vivian".into()),
-            default_speed: 1.0,
-            default_pitch: 0.0,
-            default_volume: 100.0,
-            history_retention_days: -1,
-            inference_backend: "qwen3_tts_mlx".into(),
-            zero_shot_backend: "qwen3_tts_mlx".into(),
-            training_backend: "option_c".into(),
-            preferred_output_device: None,
-            preferred_input_device: None,
-            tts_download_format: "mp3".into(),
             translation_auto_save_transcript: false,
             translation_periodic_save_transcript: false,
             translation_transcript_file_name: "transcript.md".into(),
@@ -70,9 +40,7 @@ impl Default for AppPreferences {
             translation_font_size_preset: "24".into(),
             translation_anchor_position_preset: "50".into(),
             experimental_spoken_translation_enabled: false,
-            experimental_spoken_translation_output_device: None,
-            experimental_spoken_translation_voice: Some("vivian".into()),
-            debug_logs_enabled: false,
+            experimental_spoken_translation_voice: Some("apple-voice-1".into()),
         }
     }
 }

@@ -45,14 +45,11 @@
   ] as const;
   const fontSizes = ['16', '20', '24', '30', '36', '44', '52', '64', '80', '96', '120', '160'];
   const spokenVoices = [
-    { id: 'vivian', language: 'zh', zh: '薇薇安', en: 'Vivian' },
-    { id: 'serena', language: 'zh', zh: '赛琳娜', en: 'Serena' },
-    { id: 'baiyang', language: 'zh', zh: '白杨', en: 'Baiyang' },
-    { id: 'yangyang', language: 'zh', zh: '杨阳', en: 'Yangyang' },
-    { id: 'ryan', language: 'en', zh: 'Ryan', en: 'Ryan' },
-    { id: 'aiden', language: 'en', zh: 'Aiden', en: 'Aiden' },
-    { id: 'maple', language: 'en', zh: 'Maple', en: 'Maple' },
-    { id: 'juniper', language: 'en', zh: 'Juniper', en: 'Juniper' }
+    { id: 'apple-voice-1', zh: 'Apple 音色 1', en: 'Apple Voice 1' },
+    { id: 'apple-voice-2', zh: 'Apple 音色 2', en: 'Apple Voice 2' },
+    { id: 'apple-voice-3', zh: 'Apple 音色 3', en: 'Apple Voice 3' },
+    { id: 'apple-voice-4', zh: 'Apple 音色 4', en: 'Apple Voice 4' },
+    { id: 'apple-voice-5', zh: 'Apple 音色 5', en: 'Apple Voice 5' }
   ] as const;
   const accentThemes: Array<{ id: AccentTheme; zh: string; en: string; color: string }> = [
     { id: 'neon-blue', zh: '电光蓝', en: 'BLUE', color: '#0003FE' },
@@ -117,10 +114,8 @@
     return value;
   }
 
-  function voicesForTarget(target: string) {
-    if (target === 'none') return spokenVoices;
-    const matched = spokenVoices.filter((voice) => voice.language === target);
-    return matched.length > 0 ? matched : spokenVoices;
+  function voicesForTarget(_target: string) {
+    return spokenVoices;
   }
 
   function syncVoiceToTarget(): boolean {
@@ -128,7 +123,7 @@
     const available = voicesForTarget(settings.targetLanguage);
     const current = settings.spokenTranslationVoice;
     if (current && available.some((voice) => voice.id === current)) return false;
-    settings.spokenTranslationVoice = available[0]?.id ?? 'vivian';
+    settings.spokenTranslationVoice = available[0]?.id ?? 'apple-voice-1';
     return true;
   }
 
@@ -204,11 +199,6 @@
 
   async function setSpokenTranslation(enabled: boolean): Promise<void> {
     if (!settings) return;
-    if (enabled && modelStatus && !modelStatus.speechReady) {
-      appSettingsOpen = true;
-      await downloadModels('speech');
-      return;
-    }
     if (!enabled) await stopVoicePreview();
     settings.spokenTranslationEnabled = enabled;
     settings = { ...settings };
@@ -222,7 +212,7 @@
 
   async function playVoicePreview(): Promise<void> {
     if (!settings?.spokenTranslationEnabled) return;
-    const voice = settings.spokenTranslationVoice ?? 'vivian';
+    const voice = settings.spokenTranslationVoice ?? 'apple-voice-1';
     if (previewingVoice === voice) {
       await stopVoicePreview();
       return;
@@ -231,7 +221,7 @@
     errorMessage = '';
     clearPreviewTimer();
     try {
-      await previewSpokenVoice(voice);
+      await previewSpokenVoice(voice, settings.targetLanguage);
       previewingVoice = voice;
       previewTimer = window.setTimeout(() => {
         previewingVoice = '';
@@ -397,7 +387,7 @@
   async function refreshModelStatus(): Promise<void> {
     try {
       modelStatus = await getModelStatus();
-      if (modelStatus.coreReady && modelStatus.speechReady && modelTimer !== null) {
+      if (modelStatus.coreReady && modelTimer !== null) {
         window.clearInterval(modelTimer);
         modelTimer = null;
       }
@@ -406,7 +396,7 @@
     }
   }
 
-  async function downloadModels(component: 'core' | 'speech'): Promise<void> {
+  async function downloadModels(component: 'core'): Promise<void> {
     errorMessage = '';
     try {
       modelStatus = await startModelDownload(component);
@@ -667,19 +657,16 @@
                   <option value={voice.id}>{isEnglish() ? voice.en : voice.zh}</option>
                 {/each}
               </select>
-              <button aria-label={previewingVoice === (settings.spokenTranslationVoice ?? 'vivian') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} title={previewingVoice === (settings.spokenTranslationVoice ?? 'vivian') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} class:playing={previewingVoice === (settings.spokenTranslationVoice ?? 'vivian')} class="preview-button" type="button" disabled={!settings.spokenTranslationEnabled} on:click={playVoicePreview}>
-                <span aria-hidden="true">{previewingVoice === (settings.spokenTranslationVoice ?? 'vivian') ? '■' : '▶'}</span>
+              <button aria-label={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} title={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? tr('停止试听', 'Stop preview') : tr('试听音色', 'Preview voice')} class:playing={previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1')} class="preview-button" type="button" disabled={!settings.spokenTranslationEnabled} on:click={playVoicePreview}>
+                <span aria-hidden="true">{previewingVoice === (settings.spokenTranslationVoice ?? 'apple-voice-1') ? '■' : '▶'}</span>
               </button>
             </div>
           </div>
 
-          <label class:is-disabled={!settings.spokenTranslationEnabled} class="control-block output-device-control">
+          <div class:is-disabled={!settings.spokenTranslationEnabled} class="control-block output-device-control">
             <span class="control-label">{tr('输出设备', 'OUTPUT DEVICE')}</span>
-            <select disabled={!settings.spokenTranslationEnabled} bind:value={settings.spokenTranslationOutputDevice} on:change={persist}>
-              <option value={null}>{tr('系统默认', 'System Default')}</option>
-              {#each payload.outputDevices as device}<option value={device}>{device}</option>{/each}
-            </select>
-          </label>
+            <div class="system-output-note">{tr('跟随 Mac 系统默认', 'MAC SYSTEM DEFAULT')}</div>
+          </div>
         </div>
       </div>
     </section>
@@ -785,8 +772,8 @@
               <button disabled={modelStatus.coreReady || modelStatus.downloading} on:click={() => downloadModels('core')}>{modelStatus.coreReady ? tr('已安装', 'INSTALLED') : tr('下载', 'DOWNLOAD')}</button>
             </div>
             <div class="model-row">
-              <div><strong>{tr('译文播报模型', 'SPOKEN TRANSLATION MODEL')}</strong><small>{formatDownloadSize(modelStatus.speechDownloadBytes)} · {tr('按需下载', 'OPTIONAL')}</small></div>
-              <button disabled={modelStatus.speechReady || modelStatus.downloading} on:click={() => downloadModels('speech')}>{modelStatus.speechReady ? tr('已安装', 'INSTALLED') : tr('下载', 'DOWNLOAD')}</button>
+              <div><strong>{tr('译文播报', 'SPOKEN TRANSLATION')}</strong><small>{tr('使用 Mac 内置 Apple 音色 · 无需下载模型', 'USES BUILT-IN APPLE VOICES · NO MODEL DOWNLOAD')}</small></div>
+              <button disabled>{tr('系统内置', 'BUILT IN')}</button>
             </div>
             {#if modelStatus.downloading}
               <div class="model-progress"><span style={`width:${Math.round(modelStatus.progress * 100)}%`}></span></div>

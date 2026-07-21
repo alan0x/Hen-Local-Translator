@@ -22,10 +22,6 @@ case "$MODE" in
       --manifest-path "$ROOT_DIR/Cargo.toml" \
       -p dora-qwen3-asr \
       -p dora-qwen35-translator
-    cargo build \
-      --manifest-path "$ROOT_DIR/Cargo.toml" \
-      -p dora-qwen3-tts-mlx \
-      --bin qwen-tts-node
     cd "$ROOT_DIR/hen-local-translator-shell"
     exec ./ui/node_modules/.bin/tauri dev
     ;;
@@ -36,11 +32,6 @@ case "$MODE" in
       --release \
       -p dora-qwen3-asr \
       -p dora-qwen35-translator
-    cargo build \
-      --manifest-path "$ROOT_DIR/Cargo.toml" \
-      --release \
-      -p dora-qwen3-tts-mlx \
-      --bin qwen-tts-node
     cd "$ROOT_DIR/hen-local-translator-shell"
     exec ./ui/node_modules/.bin/tauri build
     ;;

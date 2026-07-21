@@ -31,7 +31,6 @@ const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 const WORKSPACE_PACKAGES = [
   'dora-qwen3-asr',
-  'dora-qwen3-tts-mlx',
   'dora-qwen35-translator',
   'hen-local-init',
   'hen-local-translator-shell',

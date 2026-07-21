@@ -65,4 +65,5 @@ pub struct SentenceUnit {
 pub struct TranslationUpdate {
     pub history: Vec<SentenceUnit>,
     pub pending_source_text: String,
+    pub completed_count: u64,
 }

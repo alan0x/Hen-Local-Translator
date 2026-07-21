@@ -1,5 +1,6 @@
 use crate::{
     account::{AccountManager, AccountStatus},
+    apple_speech::{self, AppleSpeech},
     dataflow::{render_translation_dataflow, RenderOptions},
     preferences::{self, AppPreferences},
     runtime::{RuntimeEvent, TranslationRuntime},
@@ -38,7 +39,6 @@ pub struct TranslationSettings {
     font_size_preset: String,
     anchor_position_preset: String,
     spoken_translation_enabled: bool,
-    spoken_translation_output_device: Option<String>,
     spoken_translation_voice: Option<String>,
     auto_save_transcript: bool,
     periodic_save_transcript: bool,
@@ -60,9 +60,6 @@ impl From<&AppPreferences> for TranslationSettings {
             font_size_preset: preferences.translation_font_size_preset.clone(),
             anchor_position_preset: preferences.translation_anchor_position_preset.clone(),
             spoken_translation_enabled: preferences.experimental_spoken_translation_enabled,
-            spoken_translation_output_device: preferences
-                .experimental_spoken_translation_output_device
-                .clone(),
             spoken_translation_voice: preferences.experimental_spoken_translation_voice.clone(),
             auto_save_transcript: preferences.translation_auto_save_transcript,
             periodic_save_transcript: preferences.translation_periodic_save_transcript,
@@ -88,8 +85,6 @@ impl TranslationSettings {
         preferences.translation_font_size_preset = self.font_size_preset.clone();
         preferences.translation_anchor_position_preset = self.anchor_position_preset.clone();
         preferences.experimental_spoken_translation_enabled = self.spoken_translation_enabled;
-        preferences.experimental_spoken_translation_output_device =
-            self.spoken_translation_output_device.clone();
         preferences.experimental_spoken_translation_voice = self.spoken_translation_voice.clone();
         preferences.translation_auto_save_transcript = self.auto_save_transcript;
         preferences.translation_periodic_save_transcript = self.periodic_save_transcript;
@@ -103,7 +98,6 @@ impl TranslationSettings {
 struct SettingsPayload {
     settings: TranslationSettings,
     input_devices: Vec<String>,
-    output_devices: Vec<String>,
     subtitle_preview_visible: bool,
     running: bool,
     runtime_status: String,
@@ -154,14 +148,12 @@ struct OverlayState {
 #[serde(rename_all = "camelCase")]
 struct ModelStatus {
     core_ready: bool,
-    speech_ready: bool,
     downloading: bool,
     component: Option<String>,
     progress: f64,
     title: String,
     detail: String,
     core_download_bytes: u64,
-    speech_download_bytes: u64,
 }
 
 struct AppState {
@@ -170,6 +162,8 @@ struct AppState {
     runtime_state: Mutex<RuntimeState>,
     resource_dir: Option<PathBuf>,
     voice_preview_process: Mutex<Option<Child>>,
+    apple_speech: AppleSpeech,
+    spoken_completed_count: Mutex<u64>,
     model_download_process: Mutex<Option<(String, Child)>>,
     subtitle_preview_visible: Mutex<bool>,
     usage: Arc<UsageTracker>,
@@ -189,6 +183,8 @@ impl AppState {
             runtime_state: Mutex::new(RuntimeState::default()),
             resource_dir,
             voice_preview_process: Mutex::new(None),
+            apple_speech: AppleSpeech::new(),
+            spoken_completed_count: Mutex::new(0),
             model_download_process: Mutex::new(None),
             subtitle_preview_visible: Mutex::new(true),
             usage,
@@ -275,6 +271,7 @@ impl AppState {
             .set(Some(TranslationUpdate {
                 history,
                 pending_source_text: String::new(),
+                completed_count: 2,
             }));
         *self.subtitle_preview_visible.lock() = true;
     }
@@ -360,6 +357,7 @@ impl AppState {
                     state.message = format!("Local translation connected · {id}");
                 }
                 RuntimeEvent::Stopped => {
+                    self.apple_speech.stop();
                     if state.running {
                         if let Err(error) = self.usage.stop() {
                             log::error!("Could not stop usage timer: {error}");
@@ -370,6 +368,7 @@ impl AppState {
                     state.message = "Translation stopped".into();
                 }
                 RuntimeEvent::Error(message) => {
+                    self.apple_speech.stop();
                     if state.running {
                         if let Err(error) = self.usage.stop() {
                             log::error!("Could not stop usage timer after runtime error: {error}");
@@ -382,6 +381,28 @@ impl AppState {
             }
         }
         state.clone()
+    }
+
+    fn queue_completed_translations_for_speech(&self) {
+        if !self.runtime_state.lock().running {
+            return;
+        }
+        let Some(update) = self.runtime.shared_state().translation.read() else {
+            return;
+        };
+        let mut spoken = self.spoken_completed_count.lock();
+        if update.completed_count < *spoken {
+            *spoken = 0;
+        }
+        let new_sentences = update.completed_count.saturating_sub(*spoken) as usize;
+        for sentence in update
+            .history
+            .iter()
+            .skip(update.history.len().saturating_sub(new_sentences))
+        {
+            self.apple_speech.speak(sentence.translation.clone());
+        }
+        *spoken = update.completed_count;
     }
 
     fn save_transcript_if_needed(&self) -> Result<(), String> {
@@ -451,14 +472,12 @@ impl AppState {
             });
         ModelStatus {
             core_ready: core_models_ready(),
-            speech_ready: speech_model_ready(),
             downloading: active_component.is_some(),
             component,
             progress,
             title,
             detail,
             core_download_bytes: 4_222_472_192,
-            speech_download_bytes: 3_075_601_408,
         }
     }
 }
@@ -478,14 +497,6 @@ fn core_models_ready() -> bool {
         && translator.join("tokenizer.json").is_file()
         && (translator.join("model.safetensors").is_file()
             || translator.join("model.safetensors.index.json").is_file())
-}
-
-fn speech_model_ready() -> bool {
-    let model = model_root().join("qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit");
-    model.join("config.json").is_file()
-        && model.join("model.safetensors").is_file()
-        && model.join("speech_tokenizer/config.json").is_file()
-        && model.join("speech_tokenizer/model.safetensors").is_file()
 }
 
 fn model_state_path(component: &str) -> PathBuf {
@@ -533,7 +544,6 @@ fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
     SettingsPayload {
         settings: TranslationSettings::from(&preferences),
         input_devices: input_devices(),
-        output_devices: output_devices(),
         subtitle_preview_visible: *state.subtitle_preview_visible.lock(),
         running: runtime_state.running,
         runtime_status: runtime_state.status,
@@ -553,16 +563,11 @@ fn start_model_download(
 ) -> Result<ModelStatus, String> {
     let component = match component.as_str() {
         "core" => "core",
-        "speech" => "speech",
         _ => return Err("Unknown model component".into()),
     };
     if component == "core" && core_models_ready() {
         return Ok(state.model_status());
     }
-    if component == "speech" && speech_model_ready() {
-        return Ok(state.model_status());
-    }
-
     let mut running = state.model_download_process.lock();
     if let Some((_, child)) = running.as_mut() {
         if child
@@ -609,14 +614,36 @@ fn update_settings(
     state: State<'_, AppState>,
     settings: TranslationSettings,
 ) -> Result<(), String> {
-    let overlay_mode_changed = {
+    let (overlay_mode_changed, speech_settings_changed) = {
         let mut preferences = state.preferences.lock();
-        let changed = preferences.translation_overlay_fullscreen != settings.overlay_fullscreen;
+        let overlay_changed =
+            preferences.translation_overlay_fullscreen != settings.overlay_fullscreen;
+        let speech_changed = preferences.experimental_spoken_translation_enabled
+            != settings.spoken_translation_enabled
+            || preferences.experimental_spoken_translation_voice
+                != settings.spoken_translation_voice;
         settings.apply_to(&mut preferences);
         preferences::save(&preferences)?;
-        changed
+        (overlay_changed, speech_changed)
     };
     state.sync_shared_state();
+    if speech_settings_changed && state.runtime_state.lock().running {
+        *state.spoken_completed_count.lock() = state
+            .runtime
+            .shared_state()
+            .translation
+            .read()
+            .map(|update| update.completed_count)
+            .unwrap_or(0);
+        state.apple_speech.configure(
+            settings.spoken_translation_enabled,
+            &settings.target_language,
+            settings
+                .spoken_translation_voice
+                .as_deref()
+                .unwrap_or("apple-voice-1"),
+        );
+    }
     apply_native_identity(&app, &settings)?;
     apply_overlay_window(&app, &settings, overlay_mode_changed)?;
     if *state.subtitle_preview_visible.lock() {
@@ -631,14 +658,10 @@ fn start_translation(
     state: State<'_, AppState>,
     settings: TranslationSettings,
 ) -> Result<RuntimeState, String> {
+    stop_preview_process(&state);
     state.account.translation_allowed()?;
     if !core_models_ready() {
         return Err("Download the core translation models before starting live translation".into());
-    }
-    if settings.spoken_translation_enabled && !speech_model_ready() {
-        return Err(
-            "Download the spoken-translation model before enabling spoken translation".into(),
-        );
     }
     {
         let mut preferences = state.preferences.lock();
@@ -653,11 +676,6 @@ fn start_translation(
             source_language: &settings.source_language,
             target_language: &settings.target_language,
             system_audio: settings.input_device == "__system_audio__",
-            spoken_translation: settings.spoken_translation_enabled,
-            spoken_voice: settings
-                .spoken_translation_voice
-                .as_deref()
-                .unwrap_or("vivian"),
         },
     )?;
 
@@ -667,6 +685,15 @@ fn start_translation(
     shared.translation_window_visible.set(true);
     shared.translation_overlay_active.set(true);
     shared.translation_overlay_status.set("warming".into());
+    *state.spoken_completed_count.lock() = 0;
+    state.apple_speech.configure(
+        settings.spoken_translation_enabled,
+        &settings.target_language,
+        settings
+            .spoken_translation_voice
+            .as_deref()
+            .unwrap_or("apple-voice-1"),
+    );
     state.runtime.start(dataflow)?;
     if let Err(error) = state.usage.start() {
         let _ = state.runtime.stop();
@@ -726,6 +753,8 @@ fn sign_out_account(state: State<'_, AppState>) -> Result<AccountStatus, String>
 
 #[tauri::command]
 fn stop_translation(state: State<'_, AppState>) -> Result<RuntimeState, String> {
+    state.apple_speech.stop();
+    *state.spoken_completed_count.lock() = 0;
     state.save_transcript_if_needed()?;
     state.runtime.stop()?;
     state.usage.stop()?;
@@ -789,67 +818,6 @@ fn toggle_subtitle_preview(state: State<'_, AppState>) -> Result<bool, String> {
     Ok(next)
 }
 
-const PREVIEW_VOICES: &[&str] = &[
-    "vivian", "serena", "baiyang", "yangyang", "ryan", "aiden", "maple", "juniper",
-];
-
-fn voice_preview_path(state: &AppState, voice: &str) -> Result<PathBuf, String> {
-    let voice = voice.trim().to_lowercase();
-    if !PREVIEW_VOICES.contains(&voice.as_str()) {
-        return Err(format!("Unsupported voice preview: {voice}"));
-    }
-    let filename = format!("{voice}.wav");
-    let mut candidates = Vec::new();
-
-    if let Ok(resource_root) = std::env::var("HEN_LOCAL_APP_RESOURCES") {
-        candidates.push(
-            PathBuf::from(resource_root)
-                .join("qwen3-previews")
-                .join(&filename),
-        );
-    }
-    if let Some(resource_dir) = state.resource_dir.as_deref() {
-        candidates.push(resource_dir.join("qwen3-previews").join(&filename));
-        candidates.push(
-            resource_dir
-                .join("_up_")
-                .join("node-hub")
-                .join("dora-qwen3-tts-mlx")
-                .join("previews")
-                .join(&filename),
-        );
-    }
-    // In development, prefer the checked-in preview over a stale model cache.
-    candidates.push(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../node-hub/dora-qwen3-tts-mlx/previews")
-            .join(&filename),
-    );
-    if let Ok(model_root) = std::env::var("QWEN3_TTS_MODEL_ROOT") {
-        candidates.push(PathBuf::from(model_root).join("previews").join(&filename));
-    }
-    if let Some(home) = dirs::home_dir() {
-        candidates.push(
-            home.join(".OminiX")
-                .join("models")
-                .join("qwen3-tts-mlx")
-                .join("previews")
-                .join(&filename),
-        );
-    }
-    candidates.push(
-        PathBuf::from("node-hub")
-            .join("dora-qwen3-tts-mlx")
-            .join("previews")
-            .join(&filename),
-    );
-
-    candidates
-        .into_iter()
-        .find(|path| path.is_file())
-        .ok_or_else(|| format!("Voice preview audio is not installed for {voice}"))
-}
-
 fn stop_preview_process(state: &AppState) {
     if let Some(mut child) = state.voice_preview_process.lock().take() {
         let _ = child.kill();
@@ -858,21 +826,19 @@ fn stop_preview_process(state: &AppState) {
 }
 
 #[tauri::command]
-fn preview_spoken_voice(state: State<'_, AppState>, voice: String) -> Result<(), String> {
-    let path = voice_preview_path(&state, &voice)?;
+fn preview_spoken_voice(
+    state: State<'_, AppState>,
+    voice: String,
+    language: String,
+) -> Result<(), String> {
     stop_preview_process(&state);
-
-    #[cfg(target_os = "macos")]
-    let child = Command::new("/usr/bin/afplay")
-        .arg(&path)
-        .spawn()
-        .map_err(|error| format!("Could not play voice preview: {error}"))?;
-
-    #[cfg(not(target_os = "macos"))]
-    let child = Command::new("aplay")
-        .arg(&path)
-        .spawn()
-        .map_err(|error| format!("Could not play voice preview: {error}"))?;
+    let sample = match language.as_str() {
+        "zh" => "欢迎使用很 Local 实时翻译，这是苹果系统音色试听。",
+        "ja" => "Hen Local リアルタイム翻訳のシステム音声プレビューです。",
+        "fr" => "Bienvenue dans Hen Local, voici un aperçu de la voix système Apple.",
+        _ => "Welcome to Hen Local Live Translator. This is an Apple system voice preview.",
+    };
+    let child = apple_speech::preview(&voice, &language, sample)?;
 
     *state.voice_preview_process.lock() = Some(child);
     Ok(())
@@ -896,16 +862,6 @@ fn input_devices() -> Vec<String> {
         };
         rank(left).cmp(&rank(right)).then_with(|| left.cmp(right))
     });
-    devices.dedup();
-    devices
-}
-
-fn output_devices() -> Vec<String> {
-    let mut devices: Vec<String> = cpal::default_host()
-        .output_devices()
-        .map(|devices| devices.filter_map(|device| device.name().ok()).collect())
-        .unwrap_or_default();
-    devices.sort();
     devices.dedup();
     devices
 }
@@ -1049,6 +1005,7 @@ fn start_event_bridge(app_handle: tauri::AppHandle) {
         }
         let state = app_handle.state::<AppState>();
         let runtime_state = state.poll_runtime_events();
+        state.queue_completed_translations_for_speech();
         let overlay_state = state.overlay_state();
         let _ = app_handle.emit_to("main", "runtime-state", &runtime_state);
         let _ = app_handle.emit_to("overlay", "overlay-state", &overlay_state);

@@ -6,7 +6,6 @@
       ".tauri-sidecars/dora",
       ".tauri-sidecars/dora-qwen3-asr",
       ".tauri-sidecars/dora-qwen35-translator",
-      ".tauri-sidecars/qwen-tts-node",
       ".tauri-sidecars/hen-local-init",
       ".tauri-sidecars/mlx.metallib"
     ]

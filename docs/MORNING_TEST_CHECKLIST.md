@@ -20,8 +20,8 @@ if anything is wrong.
 2. Start, interrupt, and retry the download; confirm it resumes and eventually
    reports installed.
 3. Confirm the app cannot start translation before core models are complete.
-4. Turn on **译文播报** and confirm only then it asks for the optional roughly
-   3.1 GB spoken-translation model.
+4. Turn on **译文播报** and confirm it works immediately with the voices built
+   into macOS and does not ask for a separate 3.1 GB speech-model download.
 
 ## 3. Normal translation
 
@@ -34,15 +34,19 @@ if anything is wrong.
    Confirm it does not remain on **正在启动准备** and does not show
    `Bridge already connected` or `Failed to connect to Dora`.
 
-## 4. Eight voice previews
+## 4. Apple voice previews and live speech
 
-Test exactly: Vivian, Serena, 白杨, 杨阳, Ryan, Aiden, Maple, Juniper.
+1. Test exactly **Apple 音色 1–5** for English and Chinese targets.
+2. Confirm every preview speaks the new Hen Local sample, not “这是一个充满
+   希望的时代” and not “欢迎来到 Moxie Voice”.
+3. Start translation with speech enabled and confirm every completed translation
+   is spoken once, in order.
+4. Stop while a sentence is playing and confirm speech stops without leaving a
+   `say` or Qwen TTS process behind.
+5. Confirm output follows the Mac system-default device.
+6. Confirm the app never asks to download a speech model and no Qwen TTS node
+   appears in the running Dora dataflow.
 
-- Confirm 白杨 and 杨阳 play the new local Hen Local preview, not “这是一个充满
-  希望的时代” and not “欢迎来到 Moxie Voice”.
-- Confirm no extra voices appear.
-- Confirm each English voice appears only for an English target and each Chinese
-  voice appears for a Chinese target.
 
 ## 5. Theme, logo, and settings
 

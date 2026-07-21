@@ -6,7 +6,6 @@ members = [
     "hen-local-init",
     "node-hub/dora-qwen3-asr",
     "node-hub/dora-qwen35-translator",
-    "node-hub/dora-qwen3-tts-mlx",
 ]
 
 [workspace.package]

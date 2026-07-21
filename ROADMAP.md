@@ -336,15 +336,22 @@ Goal: validate the single subscription before introducing more pricing.
   with Tauri signatures plus Apple signing/notarization.
 - 2026-07-20: Complete secure releases and updates before enforcing paid
   subscriptions.
-- 2026-07-21: Ship a roughly 75 MB application package and download about 4.2 GB
-  of core models after first launch; download the optional 3.1 GB spoken-
-  translation model only when requested.
+- 2026-07-21: Keep the application and core translation models separate. The
+  app downloads about 4.2 GB of ASR/translation models after first launch;
+  spoken translation uses built-in macOS voices and needs no separate model.
 - 2026-07-21: Begin the seven-day trial on first device activation, not account
   creation, and use a fixed three-day payment-failure grace period.
 - 2026-07-21: Store desktop sessions, PKCE verifier state, and per-device
   private keys in macOS Keychain; ship only the license verification public key.
 ## Progress log
 
+- 2026-07-21: Replaced the optional Qwen TTS dataflow node, audio-player bridge,
+  3.1 GB model download, packaged executable, and prerecorded previews with
+  five local Apple system-voice choices. Spoken sentences are queued in order,
+  stop immediately with translation, follow the Mac's default output, and fall
+  back to an installed voice for the target language. A clean bundle contains
+  no Qwen TTS executable or preview assets; live translation starts with only
+  ASR and translation nodes.
 - 2026-07-21: Fixed local translation getting stuck at startup. Bridge retries
   now keep successful connections and reset only failed workers; shutdown
   always stops the Dora flow even if a bridge disconnect reports an error.
@@ -388,9 +395,8 @@ Goal: validate the single subscription before introducing more pricing.
   rebuilt app, DMG, signed updater archive, embedded local executables, numeric
   Apple bundle version, and static updater manifest pass local structural and
   signature smoke tests. A locked Mac prevented the final visual launch check.
-- 2026-07-21: Added first-run core model delivery (about 4.2 GB) and optional
-  spoken-translation model delivery (about 3.1 GB), with in-app progress and
-  retry-safe downloads. Models are intentionally excluded from the 75 MB DMG.
+- 2026-07-21: Added retry-safe first-run core model delivery (about 4.2 GB).
+  Models are intentionally excluded from the DMG.
 - 2026-07-21: Added the official Tauri updater, stable GitHub endpoint, daily
   automatic checks, manual Settings control, progress, deferred/restart install
   choices, active-session protection, signing key, CI secret, and `latest.json`.

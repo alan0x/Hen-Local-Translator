@@ -4,6 +4,7 @@
 
 mod account;
 mod app;
+mod apple_speech;
 mod dataflow;
 mod preferences;
 mod runtime;

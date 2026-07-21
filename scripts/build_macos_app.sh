@@ -107,8 +107,6 @@ run_cargo_build --manifest-path "$ROOT_DIR/Cargo.toml" "${CARGO_PROFILE_ARGS[@]}
   -p dora-qwen3-asr \
   -p dora-qwen35-translator \
   -p hen-local-init
-run_cargo_build --manifest-path "$ROOT_DIR/Cargo.toml" "${CARGO_PROFILE_ARGS[@]}" \
-  -p dora-qwen3-tts-mlx --bin qwen-tts-node
 
 if ! command -v dora >/dev/null 2>&1; then
   echo "dora CLI not found in PATH. Install dora-cli before packaging."
@@ -132,7 +130,6 @@ stage_sidecar() {
 stage_sidecar "$(command -v dora)" "dora"
 stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/dora-qwen3-asr" "dora-qwen3-asr"
 stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/dora-qwen35-translator" "dora-qwen35-translator"
-stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/qwen-tts-node" "qwen-tts-node"
 stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/hen-local-init" "hen-local-init"
 stage_sidecar "$BUILD_TARGET_DIR/$PROFILE_DIR/mlx.metallib" "mlx.metallib"
 
@@ -187,4 +184,4 @@ rm -rf "$SIDECAR_DIR"
 echo "App bundle created with the official Tauri shell:"
 echo "  $APP_DIR"
 echo "Models are intentionally not bundled. Core models download after setup;"
-echo "the optional spoken-translation model downloads only when enabled."
+echo "spoken translation uses built-in Apple voices and needs no model download."

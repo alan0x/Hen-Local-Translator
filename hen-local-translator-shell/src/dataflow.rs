@@ -7,8 +7,6 @@ pub struct RenderOptions<'a> {
     pub source_language: &'a str,
     pub target_language: &'a str,
     pub system_audio: bool,
-    pub spoken_translation: bool,
-    pub spoken_voice: &'a str,
 }
 
 pub fn render_translation_dataflow(
@@ -47,7 +45,7 @@ pub fn render_translation_dataflow(
     } else {
         "0"
     };
-    let mut rendered = template
+    let rendered = template
         .replace("__TRANSLATION_SRC_LANG__", options.source_language)
         .replace("__TRANSLATION_TGT_LANG__", options.target_language)
         .replace("__TRANSLATOR_PASSTHROUGH__", passthrough)
@@ -64,19 +62,6 @@ pub fn render_translation_dataflow(
         .replace("__MAX_SEGMENT_MS__", "8000")
         .replace("__START_RMS_THRESHOLD__", &format!("{start_rms:.4}"))
         .replace("__END_RMS_THRESHOLD__", &format!("{end_rms:.4}"));
-
-    let tts_path = options
-        .spoken_translation
-        .then(|| resolve_binary("qwen-tts-node"))
-        .flatten()
-        .filter(|_| qwen_tts_models_ready());
-    rendered = if let Some(tts_path) = tts_path {
-        rendered
-            .replace("__TTS_BIN_PATH__", &tts_path.to_string_lossy())
-            .replace("__SPOKEN_VOICE__", options.spoken_voice)
-    } else {
-        strip_optional_tts(&rendered)
-    };
 
     let rendered = absolutize_dataflow_paths(&template_path, &rendered);
     // Keep concurrent app/test processes from overwriting the live dataflow
@@ -154,40 +139,6 @@ fn resolve_binary(name: &str) -> Option<PathBuf> {
             .is_file()
             .then(|| candidate.canonicalize().unwrap_or(candidate))
     })
-}
-
-fn qwen_tts_models_ready() -> bool {
-    if let Some(directory) = env::var_os("QWEN3_TTS_CUSTOMVOICE_MODEL_DIR") {
-        return PathBuf::from(directory).join("config.json").is_file();
-    }
-    dirs::home_dir()
-        .map(|home| {
-            home.join(
-                ".OminiX/models/qwen3-tts-mlx/Qwen3-TTS-12Hz-1.7B-CustomVoice-8bit/config.json",
-            )
-            .is_file()
-        })
-        .unwrap_or(false)
-}
-
-fn strip_optional_tts(content: &str) -> String {
-    let mut output = String::with_capacity(content.len());
-    let mut skipping = false;
-    for line in content.lines() {
-        if line.contains("# TTS-BEGIN") {
-            skipping = true;
-            continue;
-        }
-        if line.contains("# TTS-END") {
-            skipping = false;
-            continue;
-        }
-        if !skipping {
-            output.push_str(line);
-            output.push('\n');
-        }
-    }
-    output
 }
 
 fn absolutize_dataflow_paths(template_path: &Path, content: &str) -> String {
@@ -288,8 +239,6 @@ mod tests {
                 source_language: "zh",
                 target_language: "en",
                 system_audio: true,
-                spoken_translation: false,
-                spoken_voice: "ryan",
             },
         );
         if let Some(previous) = previous_binary_dir {
@@ -307,15 +256,10 @@ mod tests {
     }
 
     #[test]
-    fn removes_optional_tts_block_without_touching_translation_nodes() {
-        let input = "before\n# TTS-BEGIN\ntts\n# TTS-END\nafter\n";
-        assert_eq!(strip_optional_tts(input), "before\nafter\n");
-    }
-
-    #[test]
-    fn spoken_translation_uses_translator_output_directly() {
+    fn native_speech_keeps_tts_out_of_the_dora_graph() {
         let template = resolve_template(None).expect("translation template should resolve");
         let content = fs::read_to_string(template).expect("template should be readable");
-        assert!(content.contains("text: translator/translation"));
+        assert!(!content.contains("qwen-tts"));
+        assert!(!content.contains("moxin-audio-player"));
     }
 }

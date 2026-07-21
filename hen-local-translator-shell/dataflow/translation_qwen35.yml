@@ -56,23 +56,3 @@ nodes:
       source_text: translator/source_text
       translation: translator/translation
       log: translator/log
-
-  # TTS-BEGIN (removed at render time when the Qwen TTS node or models are unavailable)
-  - id: tts
-    path: __TTS_BIN_PATH__
-    inputs:
-      text: translator/translation
-    outputs:
-      - audio
-      - status
-      - segment_complete
-      - log
-    env:
-      VOICE_NAME: "__SPOKEN_VOICE__"
-      LOG_LEVEL: INFO
-
-  - id: moxin-audio-player
-    path: dynamic
-    inputs:
-      audio: tts/audio
-  # TTS-END

@@ -30,7 +30,7 @@ done
 [[ -s "$ARCHIVE_PATH.sig" ]] || { echo "Updater signature missing: $ARCHIVE_PATH.sig" >&2; exit 1; }
 [[ -s "$MANIFEST_PATH" ]] || { echo "Updater manifest missing: $MANIFEST_PATH" >&2; exit 1; }
 
-for executable in hen-local-translator dora dora-qwen3-asr dora-qwen35-translator qwen-tts-node hen-local-init mlx.metallib; do
+for executable in hen-local-translator dora dora-qwen3-asr dora-qwen35-translator hen-local-init mlx.metallib; do
   test -f "$APP_PATH/Contents/MacOS/$executable" || { echo "App is missing $executable" >&2; exit 1; }
   tar -tzf "$ARCHIVE_PATH" | grep -q "Contents/MacOS/$executable$" || { echo "Updater is missing $executable" >&2; exit 1; }
 done

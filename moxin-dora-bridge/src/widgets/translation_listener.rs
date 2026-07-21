@@ -40,6 +40,7 @@ struct TranslationDisplayState {
     pending_completed_sources: HashMap<i64, String>,
     pending_completed_translations: HashMap<i64, String>,
     finalized_commit_ids: HashSet<i64>,
+    completed_count: u64,
 }
 
 impl TranslationDisplayState {
@@ -128,6 +129,7 @@ impl TranslationDisplayState {
             source_text: source_text.clone(),
             translation,
         });
+        self.completed_count = self.completed_count.saturating_add(1);
         if self.history.len() > max_history {
             self.history.remove(0);
         }
@@ -263,6 +265,7 @@ impl TranslationListenerBridge {
                                 shared.translation.set(Some(TranslationUpdate {
                                     history: display.history.clone(),
                                     pending_source_text: display.pending_source_text.clone(),
+                                    completed_count: display.completed_count,
                                 }));
                             }
                         } else if id == DataId::from("translation".to_owned()) {
@@ -330,6 +333,7 @@ impl TranslationListenerBridge {
                                     shared.translation.set(Some(TranslationUpdate {
                                         history: display.history.clone(),
                                         pending_source_text: display.pending_source_text.clone(),
+                                        completed_count: display.completed_count,
                                     }));
                                 }
                             }
@@ -485,6 +489,7 @@ mod tests {
         assert_eq!(state.history[0].source_text, "旧句");
         assert_eq!(state.history[0].translation, "old translation");
         assert_eq!(state.pending_source_text, "新句，后半段");
+        assert_eq!(state.completed_count, 1);
     }
 
     #[test]
@@ -526,5 +531,6 @@ mod tests {
             state.handle_source_text("complete", "旧句".to_string(), Some(11), 50);
         assert!(!completed_again);
         assert_eq!(state.history.len(), 1);
+        assert_eq!(state.completed_count, 1);
     }
 }

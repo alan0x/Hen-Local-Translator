@@ -19,7 +19,6 @@ export interface TranslationSettings {
   fontSizePreset: string;
   anchorPositionPreset: string;
   spokenTranslationEnabled: boolean;
-  spokenTranslationOutputDevice: string | null;
   spokenTranslationVoice: string | null;
   autoSaveTranscript: boolean;
   periodicSaveTranscript: boolean;
@@ -30,7 +29,6 @@ export interface TranslationSettings {
 export interface SettingsPayload {
   settings: TranslationSettings;
   inputDevices: string[];
-  outputDevices: string[];
   subtitlePreviewVisible: boolean;
   running: boolean;
   runtimeStatus: string;
@@ -45,14 +43,12 @@ export interface RuntimeState {
 
 export interface ModelStatus {
   coreReady: boolean;
-  speechReady: boolean;
   downloading: boolean;
-  component: 'core' | 'speech' | null;
+  component: 'core' | null;
   progress: number;
   title: string;
   detail: string;
   coreDownloadBytes: number;
-  speechDownloadBytes: number;
 }
 
 export interface UpdateStatus {
@@ -136,15 +132,13 @@ export const previewSettings: SettingsPayload = {
     fontSizePreset: '24',
     anchorPositionPreset: '50',
     spokenTranslationEnabled: false,
-    spokenTranslationOutputDevice: null,
-    spokenTranslationVoice: 'vivian',
+    spokenTranslationVoice: 'apple-voice-1',
     autoSaveTranscript: false,
     periodicSaveTranscript: false,
     transcriptFileName: 'transcript.md',
     transcriptSaveDir: null
   },
   inputDevices: ['__system_audio__', '__default_microphone__', 'MacBook Pro Microphone'],
-  outputDevices: ['System Default', 'Haochen’s AirPods Pro'],
   subtitlePreviewVisible: true,
   running: false,
   runtimeStatus: 'idle',
@@ -192,18 +186,16 @@ export async function getModelStatus(): Promise<ModelStatus> {
   if (isTauri()) return invoke<ModelStatus>('get_model_status');
   return {
     coreReady: true,
-    speechReady: true,
     downloading: false,
     component: null,
     progress: 1,
     title: 'Ready',
     detail: 'Models installed',
-    coreDownloadBytes: 4_222_472_192,
-    speechDownloadBytes: 3_075_601_408
+    coreDownloadBytes: 4_222_472_192
   };
 }
 
-export async function startModelDownload(component: 'core' | 'speech'): Promise<ModelStatus> {
+export async function startModelDownload(component: 'core'): Promise<ModelStatus> {
   if (isTauri()) return invoke<ModelStatus>('start_model_download', { component });
   return getModelStatus();
 }
@@ -399,8 +391,8 @@ export async function toggleSubtitlePreview(): Promise<boolean> {
   return browserSubtitlePreviewVisible;
 }
 
-export async function previewSpokenVoice(voice: string): Promise<void> {
-  if (isTauri()) await invoke('preview_spoken_voice', { voice });
+export async function previewSpokenVoice(voice: string, language: string): Promise<void> {
+  if (isTauri()) await invoke('preview_spoken_voice', { voice, language });
 }
 
 export async function stopSpokenVoicePreview(): Promise<void> {

@@ -171,7 +171,7 @@ jobs:
           app="dist/Hen Local Translator.app"
           test -d "$app"
           test -x "$app/Contents/MacOS/hen-local-translator"
-          for sidecar in dora dora-qwen3-asr dora-qwen35-translator qwen-tts-node hen-local-init mlx.metallib; do
+          for sidecar in dora dora-qwen3-asr dora-qwen35-translator hen-local-init mlx.metallib; do
             test -f "$app/Contents/MacOS/$sidecar"
           done
           bundle_version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")"

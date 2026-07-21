@@ -40,18 +40,6 @@
     ],
     "resources": [
       "dataflow/translation_qwen35.yml",
-      "../node-hub/dora-qwen3-tts-mlx/previews/vivian.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/serena.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/baiyang.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/yangyang.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/ryan.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/aiden.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/maple.wav",
-      "../node-hub/dora-qwen3-tts-mlx/previews/juniper.wav",
-      "../node-hub/dora-qwen3-tts-mlx/voices/baiyang/ref.wav",
-      "../node-hub/dora-qwen3-tts-mlx/voices/yangyang/ref.wav",
-      "../node-hub/dora-qwen3-tts-mlx/voices/maple/ref.wav",
-      "../node-hub/dora-qwen3-tts-mlx/voices/juniper/ref.wav",
       "../scripts/macos_preflight.sh",
       "../scripts/macos_bootstrap.sh"
     ],
