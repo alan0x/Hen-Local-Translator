@@ -1010,6 +1010,29 @@ fn create_overlay(app: &tauri::App) -> tauri::Result<WebviewWindow> {
     Ok(overlay)
 }
 
+fn show_or_create_main_window(app: &tauri::AppHandle) -> Result<(), String> {
+    let window = match app.get_webview_window("main") {
+        Some(window) => window,
+        None => {
+            let config = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|config| config.label == "main")
+                .ok_or_else(|| "Main window configuration is missing".to_string())?;
+            WebviewWindowBuilder::from_config(app, config)
+                .map_err(|error| error.to_string())?
+                .build()
+                .map_err(|error| error.to_string())?
+        }
+    };
+
+    window.show().map_err(|error| error.to_string())?;
+    window.unminimize().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
 fn localized_app_name(language: &str) -> &'static str {
     if language == "en" {
         "Hen Local Live Translator"
@@ -1150,10 +1173,8 @@ pub fn run(args: Args) {
     let cli_dataflow = args.dataflow.clone();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
+            if let Err(error) = show_or_create_main_window(app) {
+                log::error!("Could not restore the main window: {error}");
             }
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -1176,11 +1197,12 @@ pub fn run(args: Args) {
                             let result = account.complete_sign_in(&callback).await;
                             match result {
                                 Ok(status) => {
-                                    let _ = handle.emit_to("main", "account-status", status);
-                                    if let Some(window) = handle.get_webview_window("main") {
-                                        let _ = window.show();
-                                        let _ = window.set_focus();
+                                    if let Err(error) = show_or_create_main_window(&handle) {
+                                        log::error!(
+                                            "Could not restore the main window after sign-in: {error}"
+                                        );
                                     }
+                                    let _ = handle.emit_to("main", "account-status", status);
                                 }
                                 Err(error) => {
                                     let _ = handle.emit_to("main", "account-error", error);
@@ -1245,6 +1267,12 @@ pub fn run(args: Args) {
         .build(tauri::generate_context!())
         .expect("failed to build Hen Local Translator")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Err(error) = show_or_create_main_window(app) {
+                    log::error!("Could not restore the main window from the Dock: {error}");
+                }
+            }
             if let tauri::RunEvent::Ready = event {
                 let settings = {
                     let state = app.state::<AppState>();
