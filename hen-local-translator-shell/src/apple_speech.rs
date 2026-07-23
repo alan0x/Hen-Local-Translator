@@ -507,13 +507,19 @@ fn normalize_voice_id(voice: &str) -> &str {
     }
 }
 
-fn preferred_voice(language: &str, index: usize) -> Option<&'static str> {
+fn preferred_voice(language: &str, index: usize) -> Option<(&'static str, &'static str)> {
     // These are the higher-quality Siri voices installed from macOS
     // Accessibility > Live Speech > Voice. They are exposed to `say` using
     // these exact names even though AVSpeechSynthesizer does not enumerate
     // them on current macOS releases.
-    const EN: [&str; 5] = ["Voice 1", "Voice 2", "Voice 3", "Voice 4", "Voice 5"];
-    const ZH: [&str; 2] = ["Yue (Premium)", "Tingting"];
+    const EN: [(&str, &str); 5] = [
+        ("Voice 1", "en_US"),
+        ("Voice 2", "en_US"),
+        ("Voice 3", "en_US"),
+        ("Voice 4", "en_US"),
+        ("Voice 5", "en_US"),
+    ];
+    const ZH: [(&str, &str); 2] = [("Yue (Premium)", "zh_CN"), ("Tingting", "zh_CN")];
     let voices = match language {
         "zh" => ZH.as_slice(),
         "en" => EN.as_slice(),
@@ -532,10 +538,10 @@ fn voice_index(voice: &str) -> usize {
 }
 
 fn select_voice(installed: &[(String, String)], language: &str, voice: &str) -> Option<String> {
-    let preferred = preferred_voice(language, voice_index(voice))?;
+    let (preferred_name, preferred_locale) = preferred_voice(language, voice_index(voice))?;
     installed
         .iter()
-        .find(|(name, _)| name == preferred)
+        .find(|(name, locale)| name == preferred_name && locale == preferred_locale)
         .map(|(name, _)| name.clone())
 }
 
@@ -556,34 +562,16 @@ pub fn available_voices() -> Vec<SystemVoice> {
         .collect()
 }
 
-pub fn available_voice_names() -> Vec<String> {
-    available_voices()
-        .into_iter()
-        .map(|voice| voice.name)
-        .collect()
-}
-
-pub fn required_voice_name(language: &str) -> Option<&'static str> {
-    match language {
-        "zh" => Some("Yue (Premium)"),
-        "en" => Some("Voice 4"),
-        _ => None,
+pub fn ensure_voice_available(language: &str, voice: &str) -> Result<(), String> {
+    let installed = installed_voices();
+    if select_voice(&installed, language, normalize_voice_id(voice)).is_some() {
+        return Ok(());
     }
-}
-
-pub fn ensure_required_voice(language: &str) -> Result<(), String> {
-    let required = required_voice_name(language)
+    let (name, locale) = preferred_voice(language, voice_index(normalize_voice_id(voice)))
         .ok_or_else(|| format!("Spoken translation is not available for {language}"))?;
-    if available_voice_names()
-        .iter()
-        .any(|voice| voice == required)
-    {
-        Ok(())
-    } else {
-        Err(format!(
-            "Required Apple voice is not installed: {required}. Download it in macOS Accessibility settings before enabling spoken translation."
-        ))
-    }
+    Err(format!(
+        "Selected Apple voice is not installed: {name} ({locale}). Download it in macOS Accessibility settings before enabling spoken translation."
+    ))
 }
 
 #[cfg(test)]
@@ -656,22 +644,28 @@ mod tests {
 
     #[test]
     fn maps_english_choices_to_siri_live_speech_voices() {
-        assert_eq!(preferred_voice("en", 0), Some("Voice 1"));
-        assert_eq!(preferred_voice("en", 4), Some("Voice 5"));
+        assert_eq!(preferred_voice("en", 0), Some(("Voice 1", "en_US")));
+        assert_eq!(preferred_voice("en", 4), Some(("Voice 5", "en_US")));
     }
 
     #[test]
     fn maps_first_chinese_choice_to_yue_premium() {
-        assert_eq!(preferred_voice("zh", 0), Some("Yue (Premium)"));
-        assert_eq!(preferred_voice("zh", 1), Some("Tingting"));
+        assert_eq!(preferred_voice("zh", 0), Some(("Yue (Premium)", "zh_CN")));
+        assert_eq!(preferred_voice("zh", 1), Some(("Tingting", "zh_CN")));
         assert_eq!(preferred_voice("zh", 2), None);
     }
 
     #[test]
-    fn requires_yue_for_chinese_and_voice_four_for_english() {
-        assert_eq!(required_voice_name("zh"), Some("Yue (Premium)"));
-        assert_eq!(required_voice_name("en"), Some("Voice 4"));
-        assert_eq!(required_voice_name("ja"), None);
+    fn rejects_same_named_voice_from_wrong_locale() {
+        let installed = vec![
+            ("Voice 4".into(), "fr_FR".into()),
+            ("Voice 4".into(), "en_GB".into()),
+        ];
+        assert_eq!(
+            select_voice(&installed, "en", "apple-voice-4"),
+            None,
+            "Voice 4 must be the US English variant"
+        );
     }
 
     #[test]

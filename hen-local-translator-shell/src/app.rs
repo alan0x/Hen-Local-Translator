@@ -105,7 +105,7 @@ struct SettingsPayload {
     settings: TranslationSettings,
     input_devices: Vec<String>,
     output_devices: Vec<String>,
-    installed_apple_voices: Vec<String>,
+    installed_apple_voices: Vec<apple_speech::SystemVoice>,
     subtitle_preview_visible: bool,
     running: bool,
     runtime_status: String,
@@ -575,7 +575,7 @@ fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
         settings,
         input_devices: input_devices(),
         output_devices,
-        installed_apple_voices: apple_speech::available_voice_names(),
+        installed_apple_voices: apple_speech::available_voices(),
         subtitle_preview_visible: *state.subtitle_preview_visible.lock(),
         running: runtime_state.running,
         runtime_status: runtime_state.status,
@@ -647,7 +647,13 @@ fn update_settings(
     settings: TranslationSettings,
 ) -> Result<(), String> {
     if settings.spoken_translation_enabled {
-        apple_speech::ensure_required_voice(&settings.target_language)?;
+        apple_speech::ensure_voice_available(
+            &settings.target_language,
+            settings
+                .spoken_translation_voice
+                .as_deref()
+                .unwrap_or("apple-voice-1"),
+        )?;
     }
     let running = state.runtime_state.lock().running;
     let (overlay_mode_changed, speech_settings_changed) = {
@@ -708,7 +714,13 @@ fn start_translation(
 ) -> Result<RuntimeState, String> {
     stop_preview_process(&state);
     if settings.spoken_translation_enabled {
-        apple_speech::ensure_required_voice(&settings.target_language)?;
+        apple_speech::ensure_voice_available(
+            &settings.target_language,
+            settings
+                .spoken_translation_voice
+                .as_deref()
+                .unwrap_or("apple-voice-1"),
+        )?;
     }
     state.account.translation_allowed()?;
     if !core_models_ready() {
@@ -914,7 +926,7 @@ fn list_apple_voices() -> Vec<apple_speech::SystemVoice> {
 #[tauri::command]
 fn open_apple_voice_settings() -> Result<(), String> {
     Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension")
+        .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension?LiveSpeech")
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("Could not open Apple voice settings: {error}"))
