@@ -86,7 +86,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 .outline-button.square { width: 42px; min-width: 42px; height: 42px; min-height: 42px; padding: 0; }
 .settings-button { display: inline-grid; place-items: center; background: var(--ink); color: #fff; }
 .settings-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.outline-button:hover, .wide-outline:hover, .swap-button:hover { background: var(--ink); color: #fff; }
+.outline-button:hover, .wide-outline:hover, .swap-button:hover:not(:disabled) { background: var(--ink); color: #fff; }
 .outline-button.settings-button:hover { background: var(--accent); color: var(--accent-on-solid); }
 
 .control-grid { min-height: 0; border-bottom: 1px solid var(--ink); }
@@ -111,6 +111,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 select { width: 100%; height: 42px; border: 1px solid var(--ink); border-radius: 0; appearance: none; -webkit-appearance: none; background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%23101112' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px; padding: 0 34px 0 12px; font-size: 14px; font-weight: 650; outline: 0; }
 select:focus { box-shadow: inset 0 -3px var(--accent); }
 .swap-button { height: 48px; padding: 0; background: #fff; color: var(--accent-text); box-shadow: inset 0 -3px var(--accent); font-size: 24px; line-height: 1; }
+.route-field select:disabled, .swap-button:disabled { opacity: .45; background-color: #f1f2f3; color: var(--muted); box-shadow: none; }
 
 .subtitle-controls { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(145px, .85fr) minmax(150px, 1fr) minmax(170px, 1.1fr); align-items: center; gap: 14px; }
 .control-block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }

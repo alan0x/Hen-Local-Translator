@@ -26,13 +26,19 @@ impl<T: Clone + Default> DirtyValue<T> {
     }
 
     pub fn read_if_dirty(&self) -> Option<T> {
-        self.dirty
-            .swap(false, Ordering::AcqRel)
-            .then(|| self.data.read().clone())
+        self.take_dirty().then(|| self.data.read().clone())
     }
 
     pub fn read(&self) -> T {
         self.data.read().clone()
+    }
+
+    /// Consume the dirty flag without cloning the stored value.
+    ///
+    /// This is useful for consumers that only need to decide whether to build
+    /// a larger snapshot containing this value.
+    pub fn take_dirty(&self) -> bool {
+        self.dirty.swap(false, Ordering::AcqRel)
     }
 }
 
@@ -225,5 +231,21 @@ impl SharedDoraState {
 impl Default for SharedDoraState {
     fn default() -> Self {
         Self::fresh()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DirtyValue;
+
+    #[test]
+    fn take_dirty_consumes_the_flag_without_changing_the_value() {
+        let value = DirtyValue::new(String::from("before"));
+        assert!(!value.take_dirty());
+
+        value.set(String::from("after"));
+        assert!(value.take_dirty());
+        assert!(!value.take_dirty());
+        assert_eq!(value.read(), "after");
     }
 }

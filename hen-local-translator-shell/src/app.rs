@@ -112,7 +112,7 @@ struct SettingsPayload {
     runtime_message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeState {
     running: bool,
@@ -352,6 +352,19 @@ impl AppState {
             history,
             pending_source_text,
         }
+    }
+
+    fn take_overlay_dirty(&self) -> bool {
+        let shared = self.runtime.shared_state();
+        let mut dirty = false;
+        dirty |= shared.status.take_dirty();
+        dirty |= shared.translation.take_dirty();
+        dirty |= shared.translation_lang_pair.take_dirty();
+        dirty |= shared.translation_subtitle_split.take_dirty();
+        dirty |= shared.translation_font_size_preset.take_dirty();
+        dirty |= shared.translation_anchor_position_preset.take_dirty();
+        dirty |= shared.translation_overlay_active.take_dirty();
+        dirty
     }
 
     fn poll_runtime_events(&self) -> RuntimeState {
@@ -636,8 +649,18 @@ fn update_settings(
     if settings.spoken_translation_enabled {
         apple_speech::ensure_required_voice(&settings.target_language)?;
     }
+    let running = state.runtime_state.lock().running;
     let (overlay_mode_changed, speech_settings_changed) = {
         let mut preferences = state.preferences.lock();
+        if running
+            && (preferences.translation_source_language != settings.source_language
+                || preferences.translation_target_language != settings.target_language
+                || preferences.translation_input_device != settings.input_device)
+        {
+            return Err(
+                "Stop live translation before changing its languages or audio input".into(),
+            );
+        }
         let overlay_changed =
             preferences.translation_overlay_fullscreen != settings.overlay_fullscreen;
         let speech_changed = preferences.experimental_spoken_translation_enabled
@@ -1081,17 +1104,33 @@ fn open_directory(path: &Path) -> Result<(), String> {
 }
 
 fn start_event_bridge(app_handle: tauri::AppHandle) {
-    thread::spawn(move || loop {
-        if app_handle.get_webview_window("main").is_none() {
-            break;
+    thread::spawn(move || {
+        let mut last_runtime_state: Option<RuntimeState> = None;
+        loop {
+            let has_main_window = app_handle.get_webview_window("main").is_some();
+            let has_overlay_window = app_handle.get_webview_window("overlay").is_some();
+            if !has_main_window && !has_overlay_window {
+                break;
+            }
+            let state = app_handle.state::<AppState>();
+            let runtime_state = state.poll_runtime_events();
+            state.queue_completed_translations_for_speech();
+
+            if last_runtime_state.as_ref() != Some(&runtime_state) {
+                if has_main_window {
+                    let _ = app_handle.emit_to("main", "runtime-state", &runtime_state);
+                }
+                last_runtime_state = Some(runtime_state);
+            }
+
+            if state.take_overlay_dirty() {
+                let overlay_state = state.overlay_state();
+                if has_overlay_window {
+                    let _ = app_handle.emit_to("overlay", "overlay-state", &overlay_state);
+                }
+            }
+            thread::sleep(Duration::from_millis(80));
         }
-        let state = app_handle.state::<AppState>();
-        let runtime_state = state.poll_runtime_events();
-        state.queue_completed_translations_for_speech();
-        let overlay_state = state.overlay_state();
-        let _ = app_handle.emit_to("main", "runtime-state", &runtime_state);
-        let _ = app_handle.emit_to("overlay", "overlay-state", &overlay_state);
-        thread::sleep(Duration::from_millis(80));
     });
 }
 

@@ -223,7 +223,7 @@
   }
 
   async function swapLanguages(): Promise<void> {
-    if (!settings || settings.targetLanguage === 'none') return;
+    if (!settings || running || settings.targetLanguage === 'none') return;
     await stopVoicePreview();
     const source = settings.sourceLanguage;
     settings.sourceLanguage = settings.targetLanguage;
@@ -654,18 +654,18 @@
         <div class="row-controls route-controls">
           <label class="route-field">
             <span class="route-heading"><strong>{tr('源语言', 'SOURCE LANGUAGE')}</strong></span>
-            <select bind:value={settings.sourceLanguage} on:change={persist}>
+            <select disabled={running} bind:value={settings.sourceLanguage} on:change={persist}>
               {#each languages as language}
                 <option value={language.code}>{isEnglish() ? language.en : language.zh}</option>
               {/each}
             </select>
           </label>
 
-          <button class="swap-button" aria-label={tr('交换语言', 'Swap languages')} on:click={swapLanguages}>⇄</button>
+          <button disabled={running} class="swap-button" aria-label={tr('交换语言', 'Swap languages')} on:click={swapLanguages}>⇄</button>
 
           <label class="route-field">
             <span class="route-heading"><strong>{tr('目标语言', 'TARGET LANGUAGE')}</strong></span>
-            <select bind:value={settings.targetLanguage} on:change={changeTargetLanguage}>
+            <select disabled={running} bind:value={settings.targetLanguage} on:change={changeTargetLanguage}>
               {#each languages as language}
                 <option value={language.code}>{isEnglish() ? language.en : language.zh}</option>
               {/each}
@@ -675,7 +675,7 @@
 
           <label class="route-field audio-route-field">
             <span class="route-heading"><strong>{tr('输入音频', 'AUDIO INPUT')}</strong></span>
-            <select bind:value={settings.inputDevice} on:change={persist}>
+            <select disabled={running} bind:value={settings.inputDevice} on:change={persist}>
               {#each payload.inputDevices as device}
                 <option value={device}>{deviceName(device)}</option>
               {/each}
