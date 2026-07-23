@@ -41,6 +41,18 @@
     type TranslationSettings
   } from './lib/api';
 
+  type SpokenVoice = {
+    id: string;
+    name: string;
+    locale: string;
+  };
+
+  type RequiredAppleVoice = SpokenVoice & {
+    target: 'zh' | 'en';
+    languageZh: string;
+    languageEn: string;
+  };
+
   const languages = [
     { code: 'zh', zh: '中文', en: 'Chinese' },
     { code: 'en', zh: '英语', en: 'English' },
@@ -48,11 +60,33 @@
     { code: 'fr', zh: '法语', en: 'French' }
   ] as const;
   const fontSizes = ['16', '20', '24', '30', '36', '44', '52', '64', '80', '96', '120', '160'];
-  const chineseSpokenVoices = [
-    { id: 'apple-voice-1', name: 'Yue (Premium)' },
-    { id: 'apple-voice-2', name: 'Tingting' }
-  ] as const;
-  const englishSpokenVoices = [1, 2, 3, 4, 5].map((number) => ({ id: `apple-voice-${number}`, name: `Voice ${number}` }));
+  const chineseSpokenVoices: SpokenVoice[] = [
+    { id: 'apple-voice-1', name: 'Yue (Premium)', locale: 'zh_CN' },
+    { id: 'apple-voice-2', name: 'Tingting', locale: 'zh_CN' }
+  ];
+  const englishSpokenVoices: SpokenVoice[] = [1, 2, 3, 4, 5].map((number) => ({
+    id: `apple-voice-${number}`,
+    name: `Voice ${number}`,
+    locale: 'en_US'
+  }));
+  const requiredAppleVoices: RequiredAppleVoice[] = [
+    {
+      target: 'zh',
+      id: 'apple-voice-1',
+      name: 'Yue (Premium)',
+      locale: 'zh_CN',
+      languageZh: '普通话（中国大陆）',
+      languageEn: 'Mandarin Chinese (Mainland China)'
+    },
+    {
+      target: 'en',
+      id: 'apple-voice-4',
+      name: 'Voice 4',
+      locale: 'en_US',
+      languageZh: '英语（美国）',
+      languageEn: 'English (United States)'
+    }
+  ];
   const accentThemes: Array<{ id: AccentTheme; zh: string; en: string; color: string }> = [
     { id: 'neon-blue', zh: '电光蓝', en: 'BLUE', color: '#0003FE' },
     { id: 'neon-orange', zh: '霓虹橙', en: 'ORANGE', color: '#FF5705' },
@@ -89,6 +123,9 @@
   let accountRefreshTimer: number | null = null;
   let refreshingOutputDevices = false;
   let refreshingAppleVoices = false;
+  let voiceInstallGuide: RequiredAppleVoice | null = null;
+  let voiceCheckTimer: number | null = null;
+  let voiceGuideCloseTimer: number | null = null;
 
   const isEnglish = () => settings?.appLanguage === 'en';
   const tr = (zh: string, en: string) => (isEnglish() ? en : zh);
@@ -118,24 +155,34 @@
     return value;
   }
 
-  function requiredVoiceForTarget(target: string): { id: string; name: string } | null {
-    if (target === 'zh') return { id: 'apple-voice-1', name: 'Yue (Premium)' };
-    if (target === 'en') return { id: 'apple-voice-4', name: 'Voice 4' };
-    return null;
+  function requiredVoiceForTarget(target: string): RequiredAppleVoice | null {
+    return requiredAppleVoices.find((voice) => voice.target === target) ?? null;
   }
 
-  function isAppleVoiceInstalled(name: string): boolean {
-    return payload?.installedAppleVoices.includes(name) ?? false;
+  function isAppleVoiceInstalled(name: string, locale: string): boolean {
+    return payload?.installedAppleVoices.some((voice) => voice.name === name && voice.locale === locale) ?? false;
   }
 
-  function requiredVoiceReady(target: string): boolean {
-    const required = requiredVoiceForTarget(target);
-    return required !== null && isAppleVoiceInstalled(required.name);
+  function hasWrongLocaleVariant(voice: RequiredAppleVoice): boolean {
+    if (isAppleVoiceInstalled(voice.name, voice.locale)) return false;
+    return payload?.installedAppleVoices.some((installed) => (
+      installed.name === voice.name && installed.locale !== voice.locale
+    )) ?? false;
   }
 
-  function voicesForTarget(target: string): ReadonlyArray<{ id: string; name: string }> {
+  function voiceStatusLabel(voice: RequiredAppleVoice): string {
+    if (isAppleVoiceInstalled(voice.name, voice.locale)) return tr('已安装', 'INSTALLED');
+    if (hasWrongLocaleVariant(voice)) return tr('已安装其他语言版本', 'WRONG LANGUAGE INSTALLED');
+    return tr('未安装', 'NOT INSTALLED');
+  }
+
+  function voiceLanguageName(voice: RequiredAppleVoice): string {
+    return isEnglish() ? voice.languageEn : voice.languageZh;
+  }
+
+  function voicesForTarget(target: string): ReadonlyArray<SpokenVoice> {
     const candidates = target === 'zh' ? chineseSpokenVoices : target === 'en' ? englishSpokenVoices : [];
-    return candidates.filter((voice) => isAppleVoiceInstalled(voice.name));
+    return candidates.filter((voice) => isAppleVoiceInstalled(voice.name, voice.locale));
   }
 
   function syncVoiceToTarget(): boolean {
@@ -143,10 +190,6 @@
     const available = voicesForTarget(settings.targetLanguage);
     const required = requiredVoiceForTarget(settings.targetLanguage);
     let changed = false;
-    if (!requiredVoiceReady(settings.targetLanguage) && settings.spokenTranslationEnabled) {
-      settings.spokenTranslationEnabled = false;
-      changed = true;
-    }
     if (available.length === 0) {
       changed = settings.spokenTranslationEnabled || settings.spokenTranslationVoice !== null || changed;
       settings.spokenTranslationEnabled = false;
@@ -201,11 +244,23 @@
     errorMessage = '';
     try {
       const voices = await listAppleVoices();
-      payload.installedAppleVoices = voices.map((voice) => voice.name);
+      payload.installedAppleVoices = voices;
       payload = { ...payload };
       if (syncVoiceToTarget()) {
         settings = { ...settings };
         await persist();
+      }
+      if (
+        voiceInstallGuide &&
+        isAppleVoiceInstalled(voiceInstallGuide.name, voiceInstallGuide.locale)
+      ) {
+        stopVoiceAutoCheck();
+        if (voiceGuideCloseTimer === null) {
+          voiceGuideCloseTimer = window.setTimeout(() => {
+            voiceInstallGuide = null;
+            voiceGuideCloseTimer = null;
+          }, 1200);
+        }
       }
     } catch (error) {
       errorMessage = String(error);
@@ -214,7 +269,30 @@
     }
   }
 
-  async function openAppleVoiceDownloads(): Promise<void> {
+  function stopVoiceAutoCheck(): void {
+    if (voiceCheckTimer !== null) {
+      window.clearInterval(voiceCheckTimer);
+      voiceCheckTimer = null;
+    }
+  }
+
+  function startVoiceAutoCheck(): void {
+    stopVoiceAutoCheck();
+    voiceCheckTimer = window.setInterval(() => void refreshAppleVoiceStatus(), 1800);
+  }
+
+  function closeVoiceInstallGuide(): void {
+    stopVoiceAutoCheck();
+    if (voiceGuideCloseTimer !== null) {
+      window.clearTimeout(voiceGuideCloseTimer);
+      voiceGuideCloseTimer = null;
+    }
+    voiceInstallGuide = null;
+  }
+
+  async function openAppleVoiceDownloads(voice: RequiredAppleVoice): Promise<void> {
+    voiceInstallGuide = voice;
+    startVoiceAutoCheck();
     try {
       await openAppleVoiceSettings();
     } catch (error) {
@@ -222,8 +300,12 @@
     }
   }
 
+  async function reopenAppleVoiceDownloads(): Promise<void> {
+    if (voiceInstallGuide) await openAppleVoiceDownloads(voiceInstallGuide);
+  }
+
   async function swapLanguages(): Promise<void> {
-    if (!settings || settings.targetLanguage === 'none') return;
+    if (!settings || running || settings.targetLanguage === 'none') return;
     await stopVoicePreview();
     const source = settings.sourceLanguage;
     settings.sourceLanguage = settings.targetLanguage;
@@ -284,12 +366,12 @@
 
   async function setSpokenTranslation(enabled: boolean): Promise<void> {
     if (!settings) return;
-    if (enabled && !requiredVoiceReady(settings.targetLanguage)) {
-      const required = requiredVoiceForTarget(settings.targetLanguage);
+    if (enabled && voicesForTarget(settings.targetLanguage).length === 0) {
       settings.spokenTranslationEnabled = false;
       settings = { ...settings };
+      const required = requiredVoiceForTarget(settings.targetLanguage);
       errorMessage = required
-        ? tr(`请先在 Mac 系统设置中下载 ${required.name} 音色。`, `Download ${required.name} in macOS System Settings first.`)
+        ? tr(`请先安装 ${required.name} 或任一兼容音色。`, `Install ${required.name} or another compatible voice first.`)
         : tr('当前目标语言暂不支持译文播报。', 'Spoken translation is not supported for this target language.');
       return;
     }
@@ -562,6 +644,14 @@
     let unlisten: () => void = () => undefined;
     let unlistenAccount: () => void = () => undefined;
     let unlistenAccountError: () => void = () => undefined;
+    const refreshVoicesOnFocus = () => {
+      if (payload && settings) void refreshAppleVoiceStatus();
+    };
+    const refreshVoicesWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshVoicesOnFocus();
+    };
+    window.addEventListener('focus', refreshVoicesOnFocus);
+    document.addEventListener('visibilitychange', refreshVoicesWhenVisible);
     void getSettings().then((data) => {
       payload = data;
       settings = { ...data.settings };
@@ -599,6 +689,10 @@
       if (modelTimer !== null) window.clearInterval(modelTimer);
       if (usageTimer !== null) window.clearInterval(usageTimer);
       if (accountRefreshTimer !== null) window.clearInterval(accountRefreshTimer);
+      stopVoiceAutoCheck();
+      if (voiceGuideCloseTimer !== null) window.clearTimeout(voiceGuideCloseTimer);
+      window.removeEventListener('focus', refreshVoicesOnFocus);
+      document.removeEventListener('visibilitychange', refreshVoicesWhenVisible);
       void stopSpokenVoicePreview();
       unlisten();
       unlistenAccount();
@@ -654,18 +748,18 @@
         <div class="row-controls route-controls">
           <label class="route-field">
             <span class="route-heading"><strong>{tr('源语言', 'SOURCE LANGUAGE')}</strong></span>
-            <select bind:value={settings.sourceLanguage} on:change={persist}>
+            <select disabled={running} bind:value={settings.sourceLanguage} on:change={persist}>
               {#each languages as language}
                 <option value={language.code}>{isEnglish() ? language.en : language.zh}</option>
               {/each}
             </select>
           </label>
 
-          <button class="swap-button" aria-label={tr('交换语言', 'Swap languages')} on:click={swapLanguages}>⇄</button>
+          <button disabled={running} class="swap-button" aria-label={tr('交换语言', 'Swap languages')} on:click={swapLanguages}>⇄</button>
 
           <label class="route-field">
             <span class="route-heading"><strong>{tr('目标语言', 'TARGET LANGUAGE')}</strong></span>
-            <select bind:value={settings.targetLanguage} on:change={changeTargetLanguage}>
+            <select disabled={running} bind:value={settings.targetLanguage} on:change={changeTargetLanguage}>
               {#each languages as language}
                 <option value={language.code}>{isEnglish() ? language.en : language.zh}</option>
               {/each}
@@ -675,7 +769,7 @@
 
           <label class="route-field audio-route-field">
             <span class="route-heading"><strong>{tr('输入音频', 'AUDIO INPUT')}</strong></span>
-            <select bind:value={settings.inputDevice} on:change={persist}>
+            <select disabled={running} bind:value={settings.inputDevice} on:change={persist}>
               {#each payload.inputDevices as device}
                 <option value={device}>{deviceName(device)}</option>
               {/each}
@@ -872,21 +966,40 @@
               <div><strong>{tr('核心翻译模型', 'CORE TRANSLATION MODELS')}</strong><small>{formatDownloadSize(modelStatus.coreDownloadBytes)}</small></div>
               <button disabled={modelStatus.coreReady || modelStatus.downloading} on:click={() => downloadModels('core')}>{modelStatus.coreReady ? tr('已安装', 'INSTALLED') : tr('下载', 'DOWNLOAD')}</button>
             </div>
-            <div class="model-row">
-              <div>
-                <strong>{tr('译文播报必备音色', 'REQUIRED APPLE VOICES')}</strong>
-                <small>
-                  Yue (Premium) {isAppleVoiceInstalled('Yue (Premium)') ? '✓' : tr('· 未安装', '· MISSING')}
-                  · Voice 4 {isAppleVoiceInstalled('Voice 4') ? '✓' : tr('· 未安装', '· MISSING')}
-                </small>
-              </div>
-              <div class="model-row-actions">
-                {#if !isAppleVoiceInstalled('Yue (Premium)') || !isAppleVoiceInstalled('Voice 4')}
-                  <button on:click={openAppleVoiceDownloads}>{tr('下载音色', 'GET VOICES')}</button>
-                {/if}
+            <section class="voice-requirements">
+              <header>
+                <div>
+                  <strong>{tr('推荐 Apple 音色', 'RECOMMENDED APPLE VOICES')}</strong>
+                  <small>{tr('当前译文语言只需一个可用音色；下列为推荐音色，也支持已安装的兼容候选。', 'THE CURRENT TARGET NEEDS ONE AVAILABLE VOICE · RECOMMENDED VOICES ARE SHOWN BELOW, AND INSTALLED COMPATIBLE VOICES ALSO WORK.')}</small>
+                </div>
                 <button disabled={refreshingAppleVoices} on:click={refreshAppleVoiceStatus}>{refreshingAppleVoices ? tr('检测中…', 'CHECKING…') : tr('重新检测', 'RECHECK')}</button>
+              </header>
+              <div class="voice-requirement-list">
+                {#each requiredAppleVoices as voice}
+                  <article
+                    class:current={settings.targetLanguage === voice.target}
+                    class:installed={isAppleVoiceInstalled(voice.name, voice.locale)}
+                    class="voice-requirement-card"
+                  >
+                    <div class="voice-card-copy">
+                      <span>{settings.targetLanguage === voice.target ? tr('当前译文语言', 'CURRENT TARGET') : tr('切换语言时推荐', 'RECOMMENDED WHEN SWITCHING')}</span>
+                      <strong>{voice.name}</strong>
+                      <small>{voiceLanguageName(voice)} · {voice.locale}</small>
+                    </div>
+                    <div class="voice-card-status">
+                      <span class:warning={hasWrongLocaleVariant(voice)} class:ready={isAppleVoiceInstalled(voice.name, voice.locale)}>
+                        {isAppleVoiceInstalled(voice.name, voice.locale) ? '✓ ' : ''}{voiceStatusLabel(voice)}
+                      </span>
+                      {#if !isAppleVoiceInstalled(voice.name, voice.locale)}
+                        <button on:click={() => openAppleVoiceDownloads(voice)}>{tr('前往系统设置安装', 'OPEN SYSTEM SETTINGS')}</button>
+                      {:else}
+                        <button disabled>{tr('可以使用', 'READY')}</button>
+                      {/if}
+                    </div>
+                  </article>
+                {/each}
               </div>
-            </div>
+            </section>
             {#if modelStatus.downloading}
               <div class="model-progress"><span style={`width:${Math.round(modelStatus.progress * 100)}%`}></span></div>
               <p class="model-detail">{modelStatus.title} · {modelStatus.detail} · {Math.round(modelStatus.progress * 100)}%</p>
@@ -925,6 +1038,51 @@
           </section>
         {/if}
         <p class="privacy-note">{tr('语音、字幕和偏好设置均保留在本机。', 'Audio, subtitles, and preferences remain on this device.')}</p>
+      </dialog>
+    </div>
+  {/if}
+  {#if voiceInstallGuide}
+    <div class="modal-backdrop voice-guide-backdrop">
+      <dialog open class="modal voice-guide-modal" aria-label={tr('安装 Apple 音色', 'Install Apple voice')}>
+        <header>
+          <div><span>VOICE</span><h2>{tr('安装推荐音色', 'INSTALL RECOMMENDED VOICE')}</h2></div>
+          <button on:click={closeVoiceInstallGuide}>×</button>
+        </header>
+        <div class="voice-guide-content">
+          <div class="voice-guide-target">
+            <div><small>{tr('需要安装', 'VOICE TO INSTALL')}</small><strong>{voiceInstallGuide.name}</strong></div>
+            <span>{voiceLanguageName(voiceInstallGuide)} · {voiceInstallGuide.locale}</span>
+          </div>
+          {#if isAppleVoiceInstalled(voiceInstallGuide.name, voiceInstallGuide.locale)}
+            <div class="voice-guide-success"><strong>✓ {tr('检测到正确音色', 'CORRECT VOICE DETECTED')}</strong><small>{tr('安装向导将自动关闭。', 'THIS GUIDE WILL CLOSE AUTOMATICALLY.')}</small></div>
+          {:else}
+            <ol>
+              <li>{tr('在系统设置中进入“辅助功能 → 实时语音”。', 'In System Settings, open Accessibility → Live Speech.')}</li>
+              <li>
+                {voiceInstallGuide.target === 'zh'
+                  ? tr('将系统语音语言选择为“普通话”，然后打开音色信息列表。', 'Set System Speech Language to Mandarin, then open the voice info list.')
+                  : tr('将系统语音语言选择为“英语”，然后打开音色信息列表。', 'Set System Speech Language to English, then open the voice info list.')}
+              </li>
+              <li>
+                {voiceInstallGuide.target === 'zh'
+                  ? tr('搜索 Yue，并下载 Yue (Premium)。', 'Search for Yue and download Yue (Premium).')
+                  : tr('搜索 Voice 4，并下载英语（美国）版本；不要选择其他国家或语言的 Voice 4。', 'Search for Voice 4 and download the English (United States) version, not another locale.')}
+              </li>
+            </ol>
+            {#if hasWrongLocaleVariant(voiceInstallGuide)}
+              <p class="voice-guide-warning">{tr(`检测到其他语言版本的 ${voiceInstallGuide.name}，仍需安装 ${voiceInstallGuide.locale} 版本。`, `Another ${voiceInstallGuide.name} locale is installed. You still need the ${voiceInstallGuide.locale} version.`)}</p>
+            {/if}
+            <p class="voice-guide-waiting">{refreshingAppleVoices ? tr('正在自动检测安装状态…', 'CHECKING INSTALLATION…') : tr('安装后返回这里，App 会自动完成检测。', 'RETURN HERE AFTER INSTALLING; THE APP WILL DETECT IT AUTOMATICALLY.')}</p>
+          {/if}
+        </div>
+        <footer class="voice-guide-actions">
+          {#if isAppleVoiceInstalled(voiceInstallGuide.name, voiceInstallGuide.locale)}
+            <button class="primary" on:click={closeVoiceInstallGuide}>{tr('完成', 'DONE')}</button>
+          {:else}
+            <button on:click={reopenAppleVoiceDownloads}>{tr('再次打开系统设置', 'OPEN SYSTEM SETTINGS AGAIN')}</button>
+            <button class="primary" disabled={refreshingAppleVoices} on:click={refreshAppleVoiceStatus}>{refreshingAppleVoices ? tr('检测中…', 'CHECKING…') : tr('立即检测', 'CHECK NOW')}</button>
+          {/if}
+        </footer>
       </dialog>
     </div>
   {/if}

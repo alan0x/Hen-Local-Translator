@@ -3,8 +3,6 @@
   import logoUrl from '../../icons/logo-mark.png';
   import { getOverlayState, listenOverlay, startWindowDrag, type OverlayState } from './lib/api';
 
-  const stackedHistoryLimit = 16;
-
   let state: OverlayState | null = null;
   let sentenceFeed: HTMLDivElement;
   let targetFeed: HTMLElement;
@@ -136,7 +134,7 @@
     <div class="stacked-feed" aria-label="Target language above source language">
       <section class="language-pane target-pane" aria-label="Target language subtitles" bind:this={targetFeed}>
         <div class="pane-content">
-          {#each state?.history.slice(-stackedHistoryLimit) ?? [] as sentence}
+          {#each state?.history ?? [] as sentence}
             {#if sentence.translation.trim()}
               <p class="pane-line target-line">{sentence.translation}</p>
             {/if}
@@ -145,7 +143,7 @@
       </section>
       <section class="language-pane source-pane" aria-label="Source language subtitles" bind:this={sourceFeed}>
         <div class="pane-content">
-          {#each state?.history.slice(-stackedHistoryLimit) ?? [] as sentence}
+          {#each state?.history ?? [] as sentence}
             {#if sentence.sourceText.trim()}
               <p class="pane-line source-line">{sentence.sourceText}</p>
             {/if}

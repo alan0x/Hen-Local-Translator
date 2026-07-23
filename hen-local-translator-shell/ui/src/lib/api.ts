@@ -31,7 +31,7 @@ export interface SettingsPayload {
   settings: TranslationSettings;
   inputDevices: string[];
   outputDevices: string[];
-  installedAppleVoices: string[];
+  installedAppleVoices: AppleSystemVoice[];
   subtitlePreviewVisible: boolean;
   running: boolean;
   runtimeStatus: string;
@@ -150,7 +150,15 @@ export const previewSettings: SettingsPayload = {
   },
   inputDevices: ['__system_audio__', '__default_microphone__', 'MacBook Pro Microphone'],
   outputDevices: ['MacBook Pro Speakers'],
-  installedAppleVoices: ['Yue (Premium)', 'Tingting', 'Voice 1', 'Voice 2', 'Voice 3', 'Voice 4', 'Voice 5'],
+  installedAppleVoices: [
+    { name: 'Yue (Premium)', locale: 'zh_CN', sample: '你好！我叫月。' },
+    { name: 'Tingting', locale: 'zh_CN', sample: '你好！我叫婷婷。' },
+    { name: 'Voice 1', locale: 'en_US', sample: 'Hi, I’m Siri!' },
+    { name: 'Voice 2', locale: 'en_US', sample: 'Hi, I’m Siri!' },
+    { name: 'Voice 3', locale: 'en_US', sample: 'Hi, I’m Siri!' },
+    { name: 'Voice 4', locale: 'en_US', sample: 'Hi, I’m Siri!' },
+    { name: 'Voice 5', locale: 'en_US', sample: 'Hi, I’m Siri!' }
+  ],
   subtitlePreviewVisible: true,
   running: false,
   runtimeStatus: 'idle',

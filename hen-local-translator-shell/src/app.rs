@@ -105,14 +105,14 @@ struct SettingsPayload {
     settings: TranslationSettings,
     input_devices: Vec<String>,
     output_devices: Vec<String>,
-    installed_apple_voices: Vec<String>,
+    installed_apple_voices: Vec<apple_speech::SystemVoice>,
     subtitle_preview_visible: bool,
     running: bool,
     runtime_status: String,
     runtime_message: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RuntimeState {
     running: bool,
@@ -354,6 +354,19 @@ impl AppState {
         }
     }
 
+    fn take_overlay_dirty(&self) -> bool {
+        let shared = self.runtime.shared_state();
+        let mut dirty = false;
+        dirty |= shared.status.take_dirty();
+        dirty |= shared.translation.take_dirty();
+        dirty |= shared.translation_lang_pair.take_dirty();
+        dirty |= shared.translation_subtitle_split.take_dirty();
+        dirty |= shared.translation_font_size_preset.take_dirty();
+        dirty |= shared.translation_anchor_position_preset.take_dirty();
+        dirty |= shared.translation_overlay_active.take_dirty();
+        dirty
+    }
+
     fn poll_runtime_events(&self) -> RuntimeState {
         let events = self.runtime.poll_events();
         let mut state = self.runtime_state.lock();
@@ -562,7 +575,7 @@ fn get_settings(state: State<'_, AppState>) -> SettingsPayload {
         settings,
         input_devices: input_devices(),
         output_devices,
-        installed_apple_voices: apple_speech::available_voice_names(),
+        installed_apple_voices: apple_speech::available_voices(),
         subtitle_preview_visible: *state.subtitle_preview_visible.lock(),
         running: runtime_state.running,
         runtime_status: runtime_state.status,
@@ -634,10 +647,26 @@ fn update_settings(
     settings: TranslationSettings,
 ) -> Result<(), String> {
     if settings.spoken_translation_enabled {
-        apple_speech::ensure_required_voice(&settings.target_language)?;
+        apple_speech::ensure_voice_available(
+            &settings.target_language,
+            settings
+                .spoken_translation_voice
+                .as_deref()
+                .unwrap_or("apple-voice-1"),
+        )?;
     }
+    let running = state.runtime_state.lock().running;
     let (overlay_mode_changed, speech_settings_changed) = {
         let mut preferences = state.preferences.lock();
+        if running
+            && (preferences.translation_source_language != settings.source_language
+                || preferences.translation_target_language != settings.target_language
+                || preferences.translation_input_device != settings.input_device)
+        {
+            return Err(
+                "Stop live translation before changing its languages or audio input".into(),
+            );
+        }
         let overlay_changed =
             preferences.translation_overlay_fullscreen != settings.overlay_fullscreen;
         let speech_changed = preferences.experimental_spoken_translation_enabled
@@ -685,7 +714,13 @@ fn start_translation(
 ) -> Result<RuntimeState, String> {
     stop_preview_process(&state);
     if settings.spoken_translation_enabled {
-        apple_speech::ensure_required_voice(&settings.target_language)?;
+        apple_speech::ensure_voice_available(
+            &settings.target_language,
+            settings
+                .spoken_translation_voice
+                .as_deref()
+                .unwrap_or("apple-voice-1"),
+        )?;
     }
     state.account.translation_allowed()?;
     if !core_models_ready() {
@@ -891,7 +926,7 @@ fn list_apple_voices() -> Vec<apple_speech::SystemVoice> {
 #[tauri::command]
 fn open_apple_voice_settings() -> Result<(), String> {
     Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension")
+        .arg("x-apple.systempreferences:com.apple.Accessibility-Settings.extension?LiveSpeech")
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("Could not open Apple voice settings: {error}"))
@@ -1081,17 +1116,33 @@ fn open_directory(path: &Path) -> Result<(), String> {
 }
 
 fn start_event_bridge(app_handle: tauri::AppHandle) {
-    thread::spawn(move || loop {
-        if app_handle.get_webview_window("main").is_none() {
-            break;
+    thread::spawn(move || {
+        let mut last_runtime_state: Option<RuntimeState> = None;
+        loop {
+            let has_main_window = app_handle.get_webview_window("main").is_some();
+            let has_overlay_window = app_handle.get_webview_window("overlay").is_some();
+            if !has_main_window && !has_overlay_window {
+                break;
+            }
+            let state = app_handle.state::<AppState>();
+            let runtime_state = state.poll_runtime_events();
+            state.queue_completed_translations_for_speech();
+
+            if last_runtime_state.as_ref() != Some(&runtime_state) {
+                if has_main_window {
+                    let _ = app_handle.emit_to("main", "runtime-state", &runtime_state);
+                }
+                last_runtime_state = Some(runtime_state);
+            }
+
+            if state.take_overlay_dirty() {
+                let overlay_state = state.overlay_state();
+                if has_overlay_window {
+                    let _ = app_handle.emit_to("overlay", "overlay-state", &overlay_state);
+                }
+            }
+            thread::sleep(Duration::from_millis(80));
         }
-        let state = app_handle.state::<AppState>();
-        let runtime_state = state.poll_runtime_events();
-        state.queue_completed_translations_for_speech();
-        let overlay_state = state.overlay_state();
-        let _ = app_handle.emit_to("main", "runtime-state", &runtime_state);
-        let _ = app_handle.emit_to("overlay", "overlay-state", &overlay_state);
-        thread::sleep(Duration::from_millis(80));
     });
 }
 
