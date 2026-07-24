@@ -1060,8 +1060,8 @@
               <li>{tr('在系统设置中进入“辅助功能 → 实时语音”。', 'In System Settings, open Accessibility → Live Speech.')}</li>
               <li>
                 {voiceInstallGuide.target === 'zh'
-                  ? tr('将系统语音语言选择为“普通话”，然后打开音色信息列表。', 'Set System Speech Language to Mandarin, then open the voice info list.')
-                  : tr('将系统语音语言选择为“英语”，然后打开音色信息列表。', 'Set System Speech Language to English, then open the voice info list.')}
+                  ? tr('将系统语音语言选择为“普通话”，点击 Voice 右侧的 ⓘ 打开音色列表。', 'Set System Speech Language to Mandarin, then click the ⓘ beside Voice.')
+                  : tr('将系统语音语言选择为“英语”，点击 Voice 右侧的 ⓘ 打开音色列表。', 'Set System Speech Language to English, then click the ⓘ beside Voice.')}
               </li>
               <li>
                 {voiceInstallGuide.target === 'zh'
@@ -1069,6 +1069,51 @@
                   : tr('搜索 Voice 4，并下载英语（美国）版本；不要选择其他国家或语言的 Voice 4。', 'Search for Voice 4 and download the English (United States) version, not another locale.')}
               </li>
             </ol>
+            <div class="voice-guide-visual-sequence" aria-hidden="true">
+              <section class="voice-guide-visual-card">
+                <div class="voice-guide-visual-heading">
+                  <span>02</span>
+                  <strong>{tr('点击信息按钮', 'CLICK THE INFO BUTTON')}</strong>
+                </div>
+                <div class="voice-guide-system-preview">
+                  <div class="voice-guide-window-dots"><i></i><i></i><i></i></div>
+                  <div class="voice-guide-preview-row">
+                    <span>System speech language</span>
+                    <strong>{voiceInstallGuide.target === 'zh' ? tr('普通话', 'Mandarin') : tr('英语', 'English')}</strong>
+                  </div>
+                  <div class="voice-guide-preview-row voice-guide-info-row">
+                    <span>Voice</span>
+                    <b class="voice-guide-info-icon">i</b>
+                    <svg class="voice-guide-pointer" viewBox="0 0 76 38">
+                      <path d="M4 31 C 25 31, 38 27, 58 14"></path>
+                      <path d="M51 12 L 64 10 L 59 22"></path>
+                    </svg>
+                  </div>
+                </div>
+              </section>
+              <section class="voice-guide-visual-card">
+                <div class="voice-guide-visual-heading">
+                  <span>03</span>
+                  <strong>{tr('搜索并选对地区', 'SEARCH THE EXACT VOICE')}</strong>
+                </div>
+                <div class="voice-guide-list-preview">
+                  <div class="voice-guide-search-preview">
+                    <svg viewBox="0 0 20 20">
+                      <circle cx="8.5" cy="8.5" r="5.5"></circle>
+                      <path d="M12.5 12.5 L17 17"></path>
+                    </svg>
+                    <strong>{voiceInstallGuide.target === 'zh' ? 'Yue' : 'Voice 4'}</strong>
+                  </div>
+                  <div class="voice-guide-result-preview">
+                    <div>
+                      <small>{voiceLanguageName(voiceInstallGuide)}</small>
+                      <strong>{voiceInstallGuide.name}</strong>
+                    </div>
+                    <span>↓</span>
+                  </div>
+                </div>
+              </section>
+            </div>
             {#if hasWrongLocaleVariant(voiceInstallGuide)}
               <p class="voice-guide-warning">{tr(`检测到其他语言版本的 ${voiceInstallGuide.name}，仍需安装 ${voiceInstallGuide.locale} 版本。`, `Another ${voiceInstallGuide.name} locale is installed. You still need the ${voiceInstallGuide.locale} version.`)}</p>
             {/if}
