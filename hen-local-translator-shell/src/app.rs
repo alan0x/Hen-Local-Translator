@@ -139,6 +139,15 @@ struct Sentence {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct TranslatingSentence {
+    commit_id: i64,
+    source_text: String,
+    translation: String,
+    complete: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct OverlayState {
     active: bool,
     status: String,
@@ -149,6 +158,7 @@ struct OverlayState {
     anchor_position: u32,
     accent_theme: String,
     history: Vec<Sentence>,
+    translating: Option<TranslatingSentence>,
     pending_source_text: String,
 }
 
@@ -281,11 +291,13 @@ impl AppState {
                 pending_source_text: String::new(),
                 completed_count: 2,
             }));
+        self.runtime.shared_state().translation_stream.set(None);
         *self.subtitle_preview_visible.lock() = true;
     }
 
     fn clear_subtitle_preview(&self) {
         self.runtime.shared_state().translation.set(None);
+        self.runtime.shared_state().translation_stream.set(None);
         *self.subtitle_preview_visible.lock() = false;
     }
 
@@ -332,6 +344,15 @@ impl AppState {
             .unwrap_or_default();
 
         let accent_theme = self.preferences.lock().accent_theme.clone();
+        let translating = shared
+            .translation_stream
+            .read()
+            .map(|stream| TranslatingSentence {
+                commit_id: stream.commit_id,
+                source_text: stream.source_text,
+                translation: stream.translation,
+                complete: stream.complete,
+            });
         OverlayState {
             active,
             status,
@@ -350,6 +371,7 @@ impl AppState {
                 .unwrap_or(50),
             accent_theme,
             history,
+            translating,
             pending_source_text,
         }
     }
@@ -359,6 +381,7 @@ impl AppState {
         let mut dirty = false;
         dirty |= shared.status.take_dirty();
         dirty |= shared.translation.take_dirty();
+        dirty |= shared.translation_stream.take_dirty();
         dirty |= shared.translation_lang_pair.take_dirty();
         dirty |= shared.translation_subtitle_split.take_dirty();
         dirty |= shared.translation_font_size_preset.take_dirty();
@@ -745,6 +768,7 @@ fn start_translation(
     state.clear_subtitle_preview();
     let shared = state.runtime.shared_state();
     shared.translation.set(None);
+    shared.translation_stream.set(None);
     shared.translation_window_visible.set(true);
     shared.translation_overlay_active.set(true);
     shared.translation_overlay_status.set("warming".into());
@@ -824,6 +848,7 @@ fn stop_translation(state: State<'_, AppState>) -> Result<RuntimeState, String> 
     state.usage.stop()?;
     let shared = state.runtime.shared_state();
     shared.translation.set(None);
+    shared.translation_stream.set(None);
     shared.translation_window_visible.set(true);
     shared.translation_overlay_active.set(false);
     shared.translation_overlay_status.set("idle".into());

@@ -1,6 +1,6 @@
 //! Thread-safe state shared by the active translation, microphone, and audio bridges.
 
-use crate::data::{AudioData, TranslationUpdate};
+use crate::data::{AudioData, StreamingTranslation, TranslationUpdate};
 use crate::widgets::AudioSource;
 use parking_lot::RwLock;
 use std::collections::VecDeque;
@@ -159,6 +159,7 @@ pub struct SharedDoraState {
     pub status: DirtyValue<DoraStatus>,
     pub mic: MicState,
     pub translation: DirtyValue<Option<TranslationUpdate>>,
+    pub translation_stream: DirtyValue<Option<StreamingTranslation>>,
     pub translation_window_visible: DirtyValue<bool>,
     pub translation_input_device: DirtyValue<Option<String>>,
     pub translation_overlay_fullscreen: DirtyValue<bool>,
@@ -183,6 +184,7 @@ impl SharedDoraState {
             status: DirtyValue::default(),
             mic: MicState::new(),
             translation: DirtyValue::default(),
+            translation_stream: DirtyValue::default(),
             translation_window_visible: DirtyValue::new(false),
             translation_input_device: DirtyValue::new(None),
             translation_overlay_fullscreen: DirtyValue::new(true),

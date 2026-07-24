@@ -157,6 +157,13 @@ fn should_drop_low_info_chunk(chunk: &str, src_lang: &str) -> bool {
     false
 }
 
+fn warmup_enabled_from_raw(raw: Option<&str>) -> bool {
+    !matches!(
+        raw.unwrap_or("1").trim().to_lowercase().as_str(),
+        "0" | "false" | "no" | "off"
+    )
+}
+
 // ── Model path resolution ────────────────────────────────────────────────────
 
 fn resolve_model_path() -> PathBuf {
@@ -212,6 +219,7 @@ const STOP_DRAIN_TIMEOUT_MS_DEFAULT: u64 = 3000;
 
 #[derive(Debug)]
 struct TranslationTask {
+    commit_id: i64,
     source_text: String,
     system_prompt: String,
     user_prompt: String,
@@ -219,8 +227,19 @@ struct TranslationTask {
 
 #[derive(Debug)]
 struct TranslationResponse {
+    commit_id: i64,
     source_text: String,
     output: Result<String, String>,
+}
+
+#[derive(Debug)]
+enum TranslationWorkerEvent {
+    Streaming {
+        commit_id: i64,
+        source_text: String,
+        translation: String,
+    },
+    Complete(TranslationResponse),
 }
 
 fn build_system_prompt(tgt_lang: &str) -> String {
@@ -293,6 +312,10 @@ fn stop_drain_timed_out(stop_started_at: Option<Instant>, stop_drain_timeout_ms:
     stop_started_at
         .map(|started_at| started_at.elapsed() >= Duration::from_millis(stop_drain_timeout_ms))
         .unwrap_or(false)
+}
+
+fn seal_final_asr_chunk(transcript: &mut TranscriptBuffer, transcription_mode: &str) -> bool {
+    transcription_mode == "final" && transcript.seal_active_burst()
 }
 
 fn supports_enable_thinking(chat_template: &str) -> bool {
@@ -389,7 +412,18 @@ fn build_prompt_token_ids(
     Ok(prompt_ids)
 }
 
-fn generate_text_completion(
+fn append_streaming_text<F>(full_translation: &mut String, decoded: &str, on_streaming: &mut F)
+where
+    F: FnMut(&str),
+{
+    if decoded.is_empty() {
+        return;
+    }
+    full_translation.push_str(decoded);
+    on_streaming(full_translation.trim_start());
+}
+
+fn generate_text_completion<F>(
     tokenizer: &mut Tokenizer,
     model: &mut qwen3_5_35b_mlx::Model,
     chat_template: &str,
@@ -400,7 +434,11 @@ fn generate_text_completion(
     temperature: f32,
     max_tokens: usize,
     eos_tokens: &HashSet<u32>,
-) -> Result<String> {
+    mut on_streaming: F,
+) -> Result<String>
+where
+    F: FnMut(&str),
+{
     const MAX_TRANSLATION_SECS: f32 = 45.0;
     const STREAM_BATCH: usize = 5;
 
@@ -459,9 +497,7 @@ fn generate_text_completion(
             }
             let ids: Vec<u32> = token_buf.drain(..).map(|t| t.item::<u32>()).collect();
             if let Ok(text) = tokenizer.decode(&ids, true) {
-                if !text.is_empty() {
-                    full_translation.push_str(&text);
-                }
+                append_streaming_text(&mut full_translation, &text, &mut on_streaming);
             }
         }
 
@@ -474,9 +510,7 @@ fn generate_text_completion(
         let _ = eval(&token_buf);
         let ids: Vec<u32> = token_buf.drain(..).map(|t| t.item::<u32>()).collect();
         if let Ok(text) = tokenizer.decode(&ids, true) {
-            if !text.is_empty() {
-                full_translation.push_str(&text);
-            }
+            append_streaming_text(&mut full_translation, &text, &mut on_streaming);
         }
     }
 
@@ -500,6 +534,7 @@ fn generate_text_completion(
 
 fn submit_translation_task(
     request_tx: &mpsc::Sender<TranslationTask>,
+    commit_id: i64,
     source_text: &str,
     tgt_lang: &str,
     transcript: &TranscriptBuffer,
@@ -517,6 +552,7 @@ fn submit_translation_task(
 
     request_tx
         .send(TranslationTask {
+            commit_id,
             source_text,
             system_prompt,
             user_prompt,
@@ -573,10 +609,10 @@ fn commit_passthrough(
 fn handle_translation_response(
     node: &mut DoraNode,
     transcript: &mut TranscriptBuffer,
-    next_commit_id: &mut i64,
     response: TranslationResponse,
 ) -> bool {
     let TranslationResponse {
+        commit_id,
         source_text,
         output,
     } = response;
@@ -590,17 +626,31 @@ fn handle_translation_response(
         Err(e) => {
             tracing::error!("Translation generation failed: {e}");
             let _ = send_log(node, &format!("Translation generation failed: {e}"));
+            let _ = send_translation_chunk(
+                node,
+                "",
+                "failed",
+                None,
+                Some(commit_id),
+                Some(&source_text),
+            );
             return false;
         }
     };
     if translation.trim().is_empty() {
+        let _ = send_translation_chunk(
+            node,
+            "",
+            "failed",
+            None,
+            Some(commit_id),
+            Some(&source_text),
+        );
         return false;
     }
 
     match transcript.consume_stable_prefix(&source_text) {
         Ok(()) => {
-            let commit_id = *next_commit_id;
-            *next_commit_id += 1;
             tracing::info!(
                 "Committed stable prefix\ncommit_id={}\nsource_text=\n{}\n{}",
                 commit_id,
@@ -624,6 +674,14 @@ fn handle_translation_response(
                 node,
                 &format!("Failed to consume committed stable prefix: {e}"),
             );
+            let _ = send_translation_chunk(
+                node,
+                "",
+                "failed",
+                None,
+                Some(commit_id),
+                Some(&source_text),
+            );
             false
         }
     }
@@ -633,9 +691,10 @@ fn translation_worker_loop(
     model_path: PathBuf,
     temperature: f32,
     max_tokens: usize,
+    warmup_enabled: bool,
     ready_tx: mpsc::Sender<Result<(), String>>,
     request_rx: mpsc::Receiver<TranslationTask>,
-    response_tx: mpsc::Sender<TranslationResponse>,
+    response_tx: mpsc::Sender<TranslationWorkerEvent>,
 ) {
     let init = || -> Result<(
         Tokenizer,
@@ -683,17 +742,43 @@ fn translation_worker_loop(
 
     let (mut tokenizer, mut model, chat_template, model_id, force_disable_thinking, eos_tokens) =
         match init() {
-            Ok(state) => {
-                let _ = ready_tx.send(Ok(()));
-                state
-            }
+            Ok(state) => state,
             Err(e) => {
                 let _ = ready_tx.send(Err(e.to_string()));
                 return;
             }
         };
 
+    if warmup_enabled {
+        let started_at = Instant::now();
+        tracing::info!("Warming translation model before accepting live speech");
+        let warmup_result = generate_text_completion(
+            &mut tokenizer,
+            &mut model,
+            &chat_template,
+            &model_id,
+            "/no_think Translate the source text into English. Output only the translation.",
+            "Source:\nHello.",
+            force_disable_thinking,
+            0.0,
+            2,
+            &eos_tokens,
+            |_| {},
+        );
+        match warmup_result {
+            Ok(_) => tracing::info!(
+                "Translation model warm-up completed in {:.2}s",
+                started_at.elapsed().as_secs_f32()
+            ),
+            Err(error) => tracing::warn!("Translation model warm-up failed: {error}"),
+        }
+    }
+    let _ = ready_tx.send(Ok(()));
+
     while let Ok(task) = request_rx.recv() {
+        let streaming_tx = response_tx.clone();
+        let streaming_source = task.source_text.clone();
+        let commit_id = task.commit_id;
         let output = generate_text_completion(
             &mut tokenizer,
             &mut model,
@@ -705,14 +790,22 @@ fn translation_worker_loop(
             temperature,
             max_tokens,
             &eos_tokens,
+            move |translation| {
+                let _ = streaming_tx.send(TranslationWorkerEvent::Streaming {
+                    commit_id,
+                    source_text: streaming_source.clone(),
+                    translation: translation.to_string(),
+                });
+            },
         )
         .map_err(|e| e.to_string());
 
         if response_tx
-            .send(TranslationResponse {
+            .send(TranslationWorkerEvent::Complete(TranslationResponse {
+                commit_id: task.commit_id,
                 source_text: task.source_text,
                 output,
-            })
+            }))
             .is_err()
         {
             break;
@@ -761,6 +854,8 @@ fn main() -> Result<()> {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(STOP_DRAIN_TIMEOUT_MS_DEFAULT);
+    let warmup_env = std::env::var("TRANSLATOR_WARMUP").ok();
+    let warmup_enabled = warmup_enabled_from_raw(warmup_env.as_deref());
     if passthrough {
         tracing::info!(
             "Translator running in passthrough mode (no LLM); src={}",
@@ -779,7 +874,7 @@ fn main() -> Result<()> {
     // response channel returns Disconnected on `try_recv` without ever yielding.
     let (request_tx, response_rx, mut worker_handle) = if passthrough {
         let (dummy_tx, _) = mpsc::channel::<TranslationTask>();
-        let (_, never_rx) = mpsc::channel::<TranslationResponse>();
+        let (_, never_rx) = mpsc::channel::<TranslationWorkerEvent>();
         (dummy_tx, never_rx, None)
     } else {
         let model_path = resolve_model_path();
@@ -798,6 +893,7 @@ fn main() -> Result<()> {
                 worker_model_path,
                 temperature,
                 max_tokens,
+                warmup_enabled,
                 ready_tx,
                 request_rx,
                 response_tx,
@@ -835,44 +931,59 @@ fn main() -> Result<()> {
     let mut next_commit_id: i64 = 1;
     let mut last_commit_tick = Instant::now();
     let mut should_join_worker = true;
-    // Throttle streaming source_text emissions: the UI overlay re-runs the
-    // Makepad text layouter for every new string, and the layouter retains
-    // Rc<LaidoutText> beyond LRU eviction → unbounded heap growth in the UI
-    // process. 500ms + dedup keeps the overlay snappy while bounding churn.
+    // Throttle progressive source refreshes so the overlay does not relayout
+    // more often than people can read them.
     const STREAMING_MIN_INTERVAL: Duration = Duration::from_millis(500);
     let mut last_streaming_at: Option<Instant> = None;
     let mut last_streaming_text: String = String::new();
 
     loop {
         let mut did_work = false;
+        let mut schedule_requested = false;
 
-        while let Ok(response) = response_rx.try_recv() {
-            let did_commit = handle_translation_response(
-                &mut node,
-                &mut transcript,
-                &mut next_commit_id,
-                response,
-            );
-            translation_pending = false;
-
-            if did_commit {
-                let tail = transcript.uncommitted_tail();
-                if !tail.is_empty()
-                    && should_emit_streaming(
-                        &tail,
-                        &last_streaming_text,
-                        last_streaming_at,
-                        STREAMING_MIN_INTERVAL,
-                    )
-                {
-                    let _ = send_source(&mut node, &tail, "streaming", current_burst_id, None);
-                    last_streaming_at = Some(Instant::now());
-                    last_streaming_text = tail;
+        while let Ok(worker_event) = response_rx.try_recv() {
+            match worker_event {
+                TranslationWorkerEvent::Streaming {
+                    commit_id,
+                    source_text,
+                    translation,
+                } => {
+                    let _ = send_translation_chunk(
+                        &mut node,
+                        &translation,
+                        "streaming",
+                        None,
+                        Some(commit_id),
+                        Some(&source_text),
+                    );
                 }
-            }
+                TranslationWorkerEvent::Complete(response) => {
+                    let did_commit =
+                        handle_translation_response(&mut node, &mut transcript, response);
+                    translation_pending = false;
+                    schedule_requested = did_commit;
 
-            if flush_requested && transcript.stable_buffer().trim().is_empty() {
-                flush_requested = false;
+                    if did_commit {
+                        let tail = transcript.uncommitted_tail();
+                        if !tail.is_empty()
+                            && should_emit_streaming(
+                                &tail,
+                                &last_streaming_text,
+                                last_streaming_at,
+                                STREAMING_MIN_INTERVAL,
+                            )
+                        {
+                            let _ =
+                                send_source(&mut node, &tail, "streaming", current_burst_id, None);
+                            last_streaming_at = Some(Instant::now());
+                            last_streaming_text = tail;
+                        }
+                    }
+
+                    if flush_requested && transcript.stable_buffer().trim().is_empty() {
+                        flush_requested = false;
+                    }
+                }
             }
             did_work = true;
         }
@@ -961,8 +1072,9 @@ fn main() -> Result<()> {
                     };
 
                     let mut changed = transcript.update_from_chunk(burst_id, &chunk_for_buffer);
-                    if transcription_mode == "final" && transcript.seal_active_burst() {
+                    if seal_final_asr_chunk(&mut transcript, transcription_mode) {
                         changed = true;
+                        schedule_requested = true;
                     }
 
                     tracing::info!(
@@ -993,6 +1105,7 @@ fn main() -> Result<()> {
                     stopping = true;
                     stop_started_at = stop_started_at.or(Some(Instant::now()));
                     flush_requested = true;
+                    schedule_requested = true;
                     if transcript.seal_active_burst() {
                         tracing::info!(
                             "Active burst sealed on stop\n{}",
@@ -1026,6 +1139,7 @@ fn main() -> Result<()> {
         if last_commit_tick.elapsed() >= Duration::from_millis(COMMIT_TICK_MS) {
             last_commit_tick = Instant::now();
             did_work = true;
+            schedule_requested = true;
 
             if should_trigger_idle_flush(
                 last_asr_chunk_at.map(|instant| instant.elapsed()),
@@ -1046,61 +1160,66 @@ fn main() -> Result<()> {
                     );
                 }
             }
+        }
 
-            if !translation_pending {
-                let next_source = if flush_requested {
-                    let stable = transcript.stable_buffer().trim();
-                    if stable.is_empty() {
-                        None
-                    } else {
-                        Some(stable.to_string())
-                    }
-                } else if transcript.has_stable_text(COMMIT_THRESHOLD_CHARS) {
-                    let stable = transcript.stable_buffer();
-                    find_commit_boundary_from_tail(stable).map(|end| stable[..end].to_string())
-                } else {
+        if schedule_requested && !translation_pending {
+            let next_source = if flush_requested {
+                let stable = transcript.stable_buffer().trim();
+                if stable.is_empty() {
                     None
-                };
+                } else {
+                    Some(stable.to_string())
+                }
+            } else if transcript.has_stable_text(COMMIT_THRESHOLD_CHARS) {
+                let stable = transcript.stable_buffer();
+                find_commit_boundary_from_tail(stable).map(|end| stable[..end].to_string())
+            } else {
+                None
+            };
 
-                if let Some(source_text) = next_source {
-                    if passthrough {
-                        let did_commit = commit_passthrough(
-                            &mut node,
-                            &mut transcript,
-                            &mut next_commit_id,
-                            &source_text,
-                        );
-                        if did_commit {
-                            let tail = transcript.uncommitted_tail();
-                            if !tail.is_empty() {
-                                let _ = send_source(
-                                    &mut node,
-                                    &tail,
-                                    "streaming",
-                                    current_burst_id,
-                                    None,
-                                );
-                            }
-                            if flush_requested && transcript.stable_buffer().trim().is_empty() {
-                                flush_requested = false;
-                            }
+            if let Some(source_text) = next_source {
+                if passthrough {
+                    let did_commit = commit_passthrough(
+                        &mut node,
+                        &mut transcript,
+                        &mut next_commit_id,
+                        &source_text,
+                    );
+                    if did_commit {
+                        let tail = transcript.uncommitted_tail();
+                        if !tail.is_empty() {
+                            let _ =
+                                send_source(&mut node, &tail, "streaming", current_burst_id, None);
                         }
-                    } else {
-                        match submit_translation_task(
-                            &request_tx,
-                            &source_text,
-                            &tgt_lang,
-                            &transcript,
-                        ) {
-                            Ok(()) => {
-                                translation_pending = true;
+                        if flush_requested && transcript.stable_buffer().trim().is_empty() {
+                            flush_requested = false;
+                        }
+                    }
+                } else {
+                    let commit_id = next_commit_id;
+                    match submit_translation_task(
+                        &request_tx,
+                        commit_id,
+                        &source_text,
+                        &tgt_lang,
+                        &transcript,
+                    ) {
+                        Ok(()) => {
+                            next_commit_id += 1;
+                            translation_pending = true;
+                            let _ = send_source(
+                                &mut node,
+                                &source_text,
+                                "translating",
+                                None,
+                                Some(commit_id),
+                            );
+                        }
+                        Err(e) => {
+                            if let Some(h) = worker_handle.take() {
+                                let _ = h.join();
                             }
-                            Err(e) => {
-                                if let Some(h) = worker_handle.take() {
-                                    let _ = h.join();
-                                }
-                                return Err(anyhow!("Failed to submit translation task: {e}"));
-                            }
+                            return Err(anyhow!("Failed to submit translation task: {e}"));
                         }
                     }
                 }
@@ -1145,9 +1264,10 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_session_meta, build_system_prompt, find_commit_boundary_from_tail,
-        format_commit_prompt_debug, should_trigger_idle_flush, stop_drain_timed_out,
-        strip_hard_cut_terminal_punctuation,
+        append_streaming_text, build_session_meta, build_system_prompt,
+        find_commit_boundary_from_tail, format_commit_prompt_debug, seal_final_asr_chunk,
+        should_trigger_idle_flush, stop_drain_timed_out, strip_hard_cut_terminal_punctuation,
+        warmup_enabled_from_raw, TranscriptBuffer,
     };
     use std::time::{Duration, Instant};
 
@@ -1267,5 +1387,37 @@ mod tests {
             Some(Instant::now() - Duration::from_millis(1001)),
             1000
         ));
+    }
+
+    #[test]
+    fn streaming_text_callback_receives_cumulative_snapshots() {
+        let mut full = String::new();
+        let mut snapshots = Vec::new();
+        let mut collect = |text: &str| snapshots.push(text.to_string());
+
+        append_streaming_text(&mut full, "  一个", &mut collect);
+        append_streaming_text(&mut full, "完整的句子。", &mut collect);
+        append_streaming_text(&mut full, "", &mut collect);
+
+        assert_eq!(full, "  一个完整的句子。");
+        assert_eq!(snapshots, vec!["一个", "一个完整的句子。"]);
+    }
+
+    #[test]
+    fn final_asr_chunk_seals_immediately_for_scheduling() {
+        let mut transcript = TranscriptBuffer::new();
+        transcript.update_from_chunk(Some(1), "A complete sentence.");
+
+        assert!(!seal_final_asr_chunk(&mut transcript, "progressive"));
+        assert!(seal_final_asr_chunk(&mut transcript, "final"));
+        assert!(!transcript.stable_buffer().is_empty());
+    }
+
+    #[test]
+    fn translator_warmup_is_enabled_by_default_and_can_be_disabled() {
+        assert!(warmup_enabled_from_raw(None));
+        assert!(warmup_enabled_from_raw(Some("true")));
+        assert!(!warmup_enabled_from_raw(Some("0")));
+        assert!(!warmup_enabled_from_raw(Some(" OFF ")));
     }
 }

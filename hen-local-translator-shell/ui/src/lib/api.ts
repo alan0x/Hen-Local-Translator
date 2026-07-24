@@ -107,6 +107,11 @@ export interface Sentence {
   translation: string;
 }
 
+export interface TranslatingSentence extends Sentence {
+  commitId: number;
+  complete: boolean;
+}
+
 export interface OverlayState {
   active: boolean;
   status: string;
@@ -117,6 +122,7 @@ export interface OverlayState {
   anchorPosition: number;
   accentTheme: AccentTheme;
   history: Sentence[];
+  translating: TranslatingSentence | null;
   pendingSourceText: string;
 }
 
@@ -184,6 +190,7 @@ export const previewOverlay: OverlayState = {
       translation: 'Check that every sentence is clear, readable, and suitable for the venue screen.'
     }
   ],
+  translating: null,
   pendingSourceText: ''
 };
 

@@ -67,3 +67,11 @@ pub struct TranslationUpdate {
     pub pending_source_text: String,
     pub completed_count: u64,
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct StreamingTranslation {
+    pub commit_id: i64,
+    pub source_text: String,
+    pub translation: String,
+    pub complete: bool,
+}

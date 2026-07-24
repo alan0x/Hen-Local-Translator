@@ -4,7 +4,7 @@
 //! streaming/final results to SharedDoraState for consumption by the UI overlay.
 
 use crate::bridge::{BridgeState, DoraBridge};
-use crate::data::{DoraData, SentenceUnit, TranslationUpdate};
+use crate::data::{DoraData, SentenceUnit, StreamingTranslation, TranslationUpdate};
 use crate::error::{BridgeError, BridgeResult};
 use crate::shared_state::SharedDoraState;
 use crossbeam_channel::{bounded, Receiver, Sender};
@@ -41,9 +41,19 @@ struct TranslationDisplayState {
     pending_completed_translations: HashMap<i64, String>,
     finalized_commit_ids: HashSet<i64>,
     completed_count: u64,
+    active_translation: Option<StreamingTranslation>,
 }
 
 impl TranslationDisplayState {
+    fn strip_active_source_prefix(&self, text: String) -> String {
+        let Some(active) = self.active_translation.as_ref() else {
+            return text;
+        };
+        text.strip_prefix(&active.source_text)
+            .map(|tail| tail.trim_start().to_string())
+            .unwrap_or(text)
+    }
+
     fn handle_source_text(
         &mut self,
         session_status: &str,
@@ -53,8 +63,31 @@ impl TranslationDisplayState {
     ) -> bool {
         match session_status {
             "streaming" => {
+                let text = self.strip_active_source_prefix(text);
                 self.current_source_text = text.clone();
                 self.pending_source_text = text;
+                false
+            }
+            "translating" => {
+                let Some(commit_id) = commit_id else {
+                    return false;
+                };
+                self.pending_source_text = self
+                    .pending_source_text
+                    .strip_prefix(&text)
+                    .map(|tail| tail.trim_start().to_string())
+                    .unwrap_or_else(|| self.pending_source_text.clone());
+                self.current_source_text = self
+                    .current_source_text
+                    .strip_prefix(&text)
+                    .map(|tail| tail.trim_start().to_string())
+                    .unwrap_or_else(|| self.current_source_text.clone());
+                self.active_translation = Some(StreamingTranslation {
+                    commit_id,
+                    source_text: text,
+                    translation: String::new(),
+                    complete: false,
+                });
                 false
             }
             "complete" => {
@@ -78,6 +111,71 @@ impl TranslationDisplayState {
         }
     }
 
+    fn handle_translation_streaming(
+        &mut self,
+        text: String,
+        commit_id: Option<i64>,
+        source_text: Option<String>,
+    ) -> bool {
+        let Some(commit_id) = commit_id else {
+            return false;
+        };
+
+        if self
+            .active_translation
+            .as_ref()
+            .map(|active| active.commit_id)
+            != Some(commit_id)
+        {
+            let Some(source_text) = source_text else {
+                return false;
+            };
+            self.active_translation = Some(StreamingTranslation {
+                commit_id,
+                source_text,
+                translation: String::new(),
+                complete: false,
+            });
+        }
+
+        let Some(active) = self.active_translation.as_mut() else {
+            return false;
+        };
+        if active.translation == text && !active.complete {
+            return false;
+        }
+        active.translation = text;
+        active.complete = false;
+        true
+    }
+
+    fn handle_translation_failed(&mut self, commit_id: Option<i64>) -> bool {
+        if self
+            .active_translation
+            .as_ref()
+            .map(|active| active.commit_id)
+            == commit_id
+        {
+            let Some(active) = self.active_translation.take() else {
+                return false;
+            };
+
+            // The translator only consumes source text after a successful
+            // completion. Put the failed source back into the visible pending
+            // text so a retry does not make the original sentence disappear.
+            if !self.pending_source_text.starts_with(&active.source_text) {
+                self.pending_source_text = if self.pending_source_text.is_empty() {
+                    active.source_text
+                } else {
+                    format!("{} {}", active.source_text, self.pending_source_text)
+                };
+            }
+            self.current_source_text = self.pending_source_text.clone();
+            return true;
+        }
+        false
+    }
+
     fn handle_translation_complete(
         &mut self,
         text: String,
@@ -93,6 +191,12 @@ impl TranslationDisplayState {
                 self.pending_completed_sources.remove(&commit_id);
                 self.pending_completed_translations.remove(&commit_id);
                 self.finalized_commit_ids.insert(commit_id);
+                self.active_translation = Some(StreamingTranslation {
+                    commit_id,
+                    source_text: source_text.clone(),
+                    translation: text.clone(),
+                    complete: true,
+                });
                 self.push_completed_sentence(source_text, text, max_history);
                 return true;
             }
@@ -163,10 +267,12 @@ impl TranslationListenerBridge {
     /// Worker thread: listens for source_text and translation events from the translator node.
     ///
     /// The translator node sends:
-    /// - `source_text`: the original ASR transcription (plain string, once per sentence)
-    /// - `translation`: token batch with metadata `session_status = "streaming" | "complete"`
+    /// - `source_text`: progressive ASR text plus `translating`/`complete` sentence states
+    /// - `translation`: cumulative snapshots with metadata
+    ///   `session_status = "streaming" | "complete" | "failed"`
     ///
-    /// We accumulate source_text in a local buffer, updating translation with each batch.
+    /// We keep the currently translating sentence separate from finalized history so
+    /// frequent snapshots do not clone the entire subtitle history.
     fn run_event_loop(
         node_id: String,
         state: Arc<RwLock<BridgeState>>,
@@ -190,6 +296,7 @@ impl TranslationListenerBridge {
 
         if let Some(ref shared) = shared_state {
             shared.add_bridge(node_id.clone());
+            shared.translation_stream.set(None);
         }
 
         const MAX_HISTORY: usize = 10_000;
@@ -267,6 +374,11 @@ impl TranslationListenerBridge {
                                     pending_source_text: display.pending_source_text.clone(),
                                     completed_count: display.completed_count,
                                 }));
+                                if session_status == "translating" {
+                                    shared
+                                        .translation_stream
+                                        .set(display.active_translation.clone());
+                                }
                             }
                         } else if id == DataId::from("translation".to_owned()) {
                             let session_status = metadata
@@ -312,7 +424,19 @@ impl TranslationListenerBridge {
                                 &text
                             );
 
-                            if session_status == "complete" {
+                            if session_status == "streaming" {
+                                if display.handle_translation_streaming(
+                                    text,
+                                    commit_id,
+                                    source_text_meta,
+                                ) {
+                                    if let Some(ref shared) = shared_state {
+                                        shared
+                                            .translation_stream
+                                            .set(display.active_translation.clone());
+                                    }
+                                }
+                            } else if session_status == "complete" {
                                 let completed = display.handle_translation_complete(
                                     text,
                                     commit_id,
@@ -330,6 +454,20 @@ impl TranslationListenerBridge {
                                 }
 
                                 if let Some(ref shared) = shared_state {
+                                    shared
+                                        .translation_stream
+                                        .set(display.active_translation.clone());
+                                    shared.translation.set(Some(TranslationUpdate {
+                                        history: display.history.clone(),
+                                        pending_source_text: display.pending_source_text.clone(),
+                                        completed_count: display.completed_count,
+                                    }));
+                                }
+                            } else if session_status == "failed"
+                                && display.handle_translation_failed(commit_id)
+                            {
+                                if let Some(ref shared) = shared_state {
+                                    shared.translation_stream.set(None);
                                     shared.translation.set(Some(TranslationUpdate {
                                         history: display.history.clone(),
                                         pending_source_text: display.pending_source_text.clone(),
@@ -337,7 +475,6 @@ impl TranslationListenerBridge {
                                     }));
                                 }
                             }
-                            // Ignore streaming translation chunks — overlay only shows completed translations.
                         }
                     }
                     Event::Stop(_) => {
@@ -359,6 +496,7 @@ impl TranslationListenerBridge {
         *state.write() = BridgeState::Disconnected;
 
         if let Some(ref shared) = shared_state {
+            shared.translation_stream.set(None);
             shared.remove_bridge(&node_id);
         }
     }
@@ -530,6 +668,110 @@ mod tests {
         let completed_again =
             state.handle_source_text("complete", "旧句".to_string(), Some(11), 50);
         assert!(!completed_again);
+        assert_eq!(state.history.len(), 1);
+        assert_eq!(state.completed_count, 1);
+    }
+
+    #[test]
+    fn translating_state_separates_committed_source_from_new_asr_tail() {
+        let mut state = TranslationDisplayState::default();
+
+        state.handle_source_text(
+            "streaming",
+            "The first sentence. The next".to_string(),
+            None,
+            50,
+        );
+        state.handle_source_text(
+            "translating",
+            "The first sentence.".to_string(),
+            Some(3),
+            50,
+        );
+
+        assert_eq!(
+            state.active_translation.as_ref().map(|active| (
+                active.commit_id,
+                active.source_text.as_str(),
+                active.translation.as_str(),
+                active.complete
+            )),
+            Some((3, "The first sentence.", "", false))
+        );
+        assert_eq!(state.pending_source_text, "The next");
+    }
+
+    #[test]
+    fn cumulative_translation_snapshots_replace_active_text() {
+        let mut state = TranslationDisplayState::default();
+        state.handle_source_text(
+            "translating",
+            "A complete sentence.".to_string(),
+            Some(8),
+            50,
+        );
+
+        assert!(state.handle_translation_streaming(
+            "一个".to_string(),
+            Some(8),
+            Some("A complete sentence.".to_string())
+        ));
+        assert!(state.handle_translation_streaming(
+            "一个完整的句子。".to_string(),
+            Some(8),
+            Some("A complete sentence.".to_string())
+        ));
+
+        let active = state.active_translation.expect("active translation");
+        assert_eq!(active.translation, "一个完整的句子。");
+        assert!(!active.complete);
+    }
+
+    #[test]
+    fn failed_translation_restores_source_for_retry() {
+        let mut state = TranslationDisplayState::default();
+        state.handle_source_text(
+            "streaming",
+            "First sentence. Next words".to_string(),
+            None,
+            50,
+        );
+        state.handle_source_text("translating", "First sentence.".to_string(), Some(9), 50);
+
+        assert!(state.handle_translation_failed(Some(9)));
+        assert!(state.active_translation.is_none());
+        assert_eq!(state.pending_source_text, "First sentence. Next words");
+        assert_eq!(state.current_source_text, state.pending_source_text);
+    }
+
+    #[test]
+    fn final_snapshot_marks_active_translation_complete_and_adds_history() {
+        let mut state = TranslationDisplayState::default();
+        state.handle_source_text(
+            "translating",
+            "A complete sentence.".to_string(),
+            Some(12),
+            50,
+        );
+        state.handle_translation_streaming(
+            "一个完整".to_string(),
+            Some(12),
+            Some("A complete sentence.".to_string()),
+        );
+
+        assert!(state.handle_translation_complete(
+            "一个完整的句子。".to_string(),
+            Some(12),
+            Some("A complete sentence.".to_string()),
+            50
+        ));
+
+        let active = state
+            .active_translation
+            .as_ref()
+            .expect("active translation");
+        assert!(active.complete);
+        assert_eq!(active.translation, "一个完整的句子。");
         assert_eq!(state.history.len(), 1);
         assert_eq!(state.completed_count, 1);
     }

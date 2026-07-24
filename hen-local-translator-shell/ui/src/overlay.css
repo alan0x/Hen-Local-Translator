@@ -166,6 +166,25 @@ html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; backg
 
 .subtitle-entry.pending .translation { color: transparent; }
 .subtitle-entry.pending .source { color: #d8dbe0; }
+.subtitle-entry.translating .translation,
+.translating-line {
+  min-height: 1.34em;
+}
+.subtitle-entry.translating .source,
+.translating-source {
+  color: #d8dbe0;
+}
+
+.translation-caret {
+  display: inline-block;
+  width: .08em;
+  height: .92em;
+  margin-left: .12em;
+  border-radius: 999px;
+  vertical-align: -.08em;
+  background: currentColor;
+  animation: translation-caret-pulse 820ms ease-in-out infinite;
+}
 
 .overlay-shell.sentence-pairs .subtitle-feed { gap: 0; }
 .overlay-shell.sentence-pairs .subtitle-entry p { min-height: 0; }
@@ -186,6 +205,11 @@ html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; backg
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes translation-caret-pulse {
+  0%, 100% { opacity: .28; }
+  50% { opacity: 1; }
+}
+
 @media (max-width: 680px) {
   .subtitle-feed { padding: 28px 24px 24px; }
   .subtitle-entry p { padding: 15px 17px; }
@@ -195,4 +219,5 @@ html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; backg
 @media (prefers-reduced-motion: reduce) {
   .subtitle-feed { scroll-behavior: auto; }
   .subtitle-entry { animation: none; }
+  .translation-caret { animation: none; opacity: .8; }
 }
